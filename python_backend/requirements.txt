@@ -1,0 +1,8 @@
+flask
+flask-cors
+TTS
+torch
+torchvision
+torchaudio
+librosa
+soundfile
