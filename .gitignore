@@ -1,30 +1,27 @@
-/.phpunit.cache
+# Python stuff
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+
+# AI Models (Too heavy for GitHub)
+python_backend/GPT-SoVITS/pretrained_models/
+python_backend/models/
+python_backend/tts_models/
+
+# Temporary Audio Files
+python_backend/temp_audio/
+public/storage/references/
+public/storage/generated/
+
+# Laravel stuff
+/vendor
 /node_modules
-/public/build
-/public/hot
 /public/storage
 /storage/*.key
-/vendor
 .env
 .env.backup
 .env.production
-.phpactor.json
-.phpunit.result.cache
-Homestead.json
-Homestead.yaml
-auth.json
-npm-debug.log
-yarn-error.log
-/.fleet
-/.idea
-/.vscode
-
-# Python Backend
-/python_backend/temp_audio/
-/python_backend/models/
-model_text.zip
-model_text/
-*.safetensors
-*.wav
-*.mp3
-.ipynb_checkpoints/
+composer.lock
+package-lock.json

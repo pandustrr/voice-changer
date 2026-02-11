@@ -9,3 +9,4 @@ Route::get('/user', function (Request $request) {
 })->middleware('auth:sanctum');
 
 Route::post('/clone-voice', [VoiceChangerController::class, 'clone']);
+Route::get('/engine-status', [VoiceChangerController::class, 'engineStatus']);

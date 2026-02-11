@@ -116,6 +116,22 @@
                         </div>
                         <p id="recordStatus" class="mt-8 text-gray-400 font-medium tracking-wide">Press to start recording (5-10 sec)</p>
 
+                        <div class="flex items-center gap-4 mt-8 w-full max-w-xs">
+                            <div class="h-px flex-1 bg-white/10"></div>
+                            <span class="text-gray-600 text-xs font-bold uppercase tracking-widest">OR</span>
+                            <div class="h-px flex-1 bg-white/10"></div>
+                        </div>
+
+                        <label for="fileUpload" class="mt-8 cursor-pointer group/upload">
+                            <div class="flex items-center gap-3 px-6 py-3 bg-white/5 border border-white/10 rounded-xl group-hover/upload:bg-white/10 transition-colors">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0l-4 4m4-4v12" />
+                                </svg>
+                                <span class="text-gray-300 font-medium" id="uploadLabel">Upload Voice File</span>
+                            </div>
+                            <input type="file" id="fileUpload" class="hidden" accept="audio/*">
+                        </label>
+
                         <div id="previewContainer" class="hidden w-full max-w-md mt-8 space-y-4">
                             <div class="flex items-center gap-3 px-4 py-3 bg-white/5 rounded-xl border border-white/10">
                                 <div class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
@@ -135,6 +151,17 @@
                         <h2 class="text-2xl font-bold">Script Creation</h2>
                         <p class="text-gray-500 text-sm italic">Transform text into your voice</p>
                     </div>
+                </div>
+
+                <!-- AI Engine Selector -->
+                <div class="mb-6">
+                    <label class="block text-sm font-semibold text-gray-400 mb-3">AI Engine Selection</label>
+                    <select id="engineSelector" disabled class="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all">
+                        <option value="xtts">XTTS v2 - Fast & Free (Quality: 70%)</option>
+                        <option value="elevenlabs" selected>ElevenLabs - Premium Quality (95%+) ⭐</option>
+                        <option value="gptsovits">GPT-SoVITS - Indonesian Native (90%)</option>
+                    </select>
+                    <p class="text-xs text-gray-600 mt-2 italic">💡 ElevenLabs recommended for best Indonesian articulation</p>
                 </div>
 
                 <div class="relative">
@@ -197,9 +224,12 @@
     <!-- JS Logic -->
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            let mediaRecorder;
-            let audioChunks = [];
-            let audioBlob;
+            let audioContext;
+            let processor;
+            let input;
+            let audioData = [];
+            let recording = false;
+            let stream;
 
             const recordBtn = document.getElementById('recordBtn');
             const recordBtnCircle = document.getElementById('recordBtnCircle');
@@ -208,65 +238,163 @@
             const recordStatus = document.getElementById('recordStatus');
             const previewContainer = document.getElementById('previewContainer');
             const audioPreview = document.getElementById('audioPreview');
+            const fileUpload = document.getElementById('fileUpload');
+            const uploadLabel = document.getElementById('uploadLabel');
 
             const step2 = document.getElementById('step2');
             const textInput = document.getElementById('textInput');
             const generateBtn = document.getElementById('generateBtn');
+            const engineSelector = document.getElementById('engineSelector');
 
             const resultSection = document.getElementById('resultSection');
             const finalAudio = document.getElementById('finalAudio');
 
+            let finalWavBlob;
+
             recordBtn.addEventListener('click', async () => {
-                if (!mediaRecorder || mediaRecorder.state === 'inactive') {
+                if (!recording) {
                     try {
-                        const stream = await navigator.mediaDevices.getUserMedia({
+                        stream = await navigator.mediaDevices.getUserMedia({
                             audio: true
                         });
-                        mediaRecorder = new MediaRecorder(stream);
-                        audioChunks = [];
+                        audioContext = new(window.AudioContext || window.webkitAudioContext)();
+                        // Use hardware sample rate to avoid initialization errors
+                        const actualSampleRate = audioContext.sampleRate;
 
-                        mediaRecorder.ondataavailable = (event) => {
-                            audioChunks.push(event.data);
+                        input = audioContext.createMediaStreamSource(stream);
+                        processor = audioContext.createScriptProcessor(4096, 1, 1);
+
+                        audioData = [];
+
+                        processor.onaudioprocess = (e) => {
+                            if (!recording) return;
+                            const channelData = e.inputBuffer.getChannelData(0);
+                            audioData.push(new Float32Array(channelData));
                         };
 
-                        mediaRecorder.onstop = () => {
-                            audioBlob = new Blob(audioChunks, {
-                                type: 'audio/wav'
-                            });
-                            const audioUrl = URL.createObjectURL(audioBlob);
-                            audioPreview.src = audioUrl;
-                            previewContainer.classList.remove('hidden');
+                        input.connect(processor);
+                        processor.connect(audioContext.destination);
 
-                            // Enable step 2 with animation
-                            step2.classList.remove('opacity-40', 'grayscale', 'cursor-not-allowed');
-                            textInput.disabled = false;
-                            generateBtn.disabled = false;
+                        if (audioContext.state === 'suspended') {
+                            await audioContext.resume();
+                        }
 
-                            recordStatus.textContent = "Initialization Complete";
-                            recordStatus.classList.add('text-green-400');
-                        };
-
-                        mediaRecorder.start();
+                        recording = true;
                         micIcon.classList.add('hidden');
                         stopIcon.classList.remove('hidden');
-                        recordBtnCircle.classList.replace('bg-red-500', 'bg-gray-800');
+                        recordBtnCircle.classList.replace('bg-red-500', 'bg-red-700');
                         recordBtnCircle.classList.add('animate-pulse');
-                        recordStatus.textContent = "Capturing Voice Profile...";
+                        recordStatus.textContent = "Capturing Voice Profile (Speak now...)";
                     } catch (err) {
-                        alert("Microphone access denied. Please allow microphone to use this app.");
+                        console.error("Recording error:", err);
+                        alert("Error: " + err.message);
                     }
                 } else {
-                    mediaRecorder.stop();
-                    micIcon.classList.remove('hidden');
-                    stopIcon.classList.add('hidden');
-                    recordBtnCircle.classList.replace('bg-gray-800', 'bg-red-500');
-                    recordBtnCircle.classList.remove('animate-pulse');
+                    stopRecording();
                 }
             });
 
+            fileUpload.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    finalWavBlob = file;
+                    uploadLabel.textContent = file.name;
+
+                    const audioUrl = URL.createObjectURL(file);
+                    audioPreview.src = audioUrl;
+                    previewContainer.classList.remove('hidden');
+
+                    // Unlock Step 2
+                    step2.classList.remove('opacity-40', 'grayscale', 'cursor-not-allowed');
+                    textInput.disabled = false;
+                    generateBtn.disabled = false;
+                    engineSelector.disabled = false;
+
+                    recordStatus.textContent = "File Uploaded Successfully!";
+                    recordStatus.classList.add('text-green-400');
+                }
+            });
+
+            function stopRecording() {
+                recording = false;
+
+                // Immediately unlock UI to prevent user getting stuck
+                step2.classList.remove('opacity-40', 'grayscale', 'cursor-not-allowed');
+                textInput.disabled = false;
+                generateBtn.disabled = false;
+                engineSelector.disabled = false;
+
+                if (processor) processor.disconnect();
+                if (input) input.disconnect();
+                if (stream) stream.getTracks().forEach(track => track.stop());
+
+                micIcon.classList.remove('hidden');
+                stopIcon.classList.add('hidden');
+                recordBtnCircle.classList.replace('bg-red-700', 'bg-red-500');
+                recordBtnCircle.classList.remove('animate-pulse');
+
+                const buffer = flattenArray(audioData);
+                // Use actual sample rate for encoding
+                finalWavBlob = encodeWAV(buffer, audioContext.sampleRate);
+
+                const audioUrl = URL.createObjectURL(finalWavBlob);
+                audioPreview.src = audioUrl;
+                previewContainer.classList.remove('hidden');
+
+                recordStatus.textContent = "Voice Profile Captured Successfully!";
+                recordStatus.classList.add('text-green-400');
+            }
+
+            function flattenArray(channelBuffer) {
+                let result = new Float32Array(channelBuffer.length * 4096);
+                let offset = 0;
+                for (let i = 0; i < channelBuffer.length; i++) {
+                    result.set(channelBuffer[i], offset);
+                    offset += channelBuffer[i].length;
+                }
+                return result.slice(0, offset);
+            }
+
+            function encodeWAV(samples, sampleRate) {
+                const buffer = new ArrayBuffer(44 + samples.length * 2);
+                const view = new DataView(buffer);
+
+                writeString(view, 0, 'RIFF');
+                view.setUint32(4, 32 + samples.length * 2, true);
+                writeString(view, 8, 'WAVE');
+                writeString(view, 12, 'fmt ');
+                view.setUint32(16, 16, true);
+                view.setUint16(20, 1, true);
+                view.setUint16(22, 1, true);
+                view.setUint32(24, sampleRate, true);
+                view.setUint32(28, sampleRate * 2, true);
+                view.setUint16(32, 2, true);
+                view.setUint16(34, 16, true);
+                writeString(view, 36, 'data');
+                view.setUint32(40, samples.length * 2, true);
+
+                floatTo16BitPCM(view, 44, samples);
+                return new Blob([view], {
+                    type: 'audio/wav'
+                });
+            }
+
+            function floatTo16BitPCM(output, offset, input) {
+                for (let i = 0; i < input.length; i++, offset += 2) {
+                    let s = Math.max(-1, Math.min(1, input[i]));
+                    output.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+                }
+            }
+
+            function writeString(view, offset, string) {
+                for (let i = 0; i < string.length; i++) {
+                    view.setUint8(offset + i, string.charCodeAt(i));
+                }
+            }
+
             generateBtn.addEventListener('click', async () => {
                 const text = textInput.value;
-                if (!text || !audioBlob) return;
+                if (!text || !finalWavBlob) return;
 
                 generateBtn.disabled = true;
                 generateBtn.innerHTML = `
@@ -278,8 +406,9 @@
                 `;
 
                 const formData = new FormData();
-                formData.append('audio', audioBlob, 'reference.wav');
+                formData.append('audio', finalWavBlob, 'reference.wav');
                 formData.append('text', text);
+                formData.append('engine', engineSelector.value);
 
                 try {
                     const response = await fetch('/api/clone-voice', {
@@ -294,12 +423,8 @@
                         const blob = await response.blob();
                         const url = URL.createObjectURL(blob);
                         finalAudio.src = url;
-
                         resultSection.classList.remove('hidden');
-                        setTimeout(() => {
-                            resultSection.classList.remove('scale-95', 'opacity-0');
-                        }, 50);
-
+                        setTimeout(() => resultSection.classList.remove('scale-95', 'opacity-0'), 50);
                         document.getElementById('downloadBtn').href = url;
                         resultSection.scrollIntoView({
                             behavior: 'smooth'
@@ -323,6 +448,7 @@
             });
         });
     </script>
+
 </body>
 
 </html>
