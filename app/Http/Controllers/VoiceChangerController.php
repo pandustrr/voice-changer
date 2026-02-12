@@ -14,7 +14,6 @@ class VoiceChangerController extends Controller
      * Voice cloning dengan Multi-Engine support
      * Engine 1: XTTS v2 (Port 5000) - Fallback / Free
      * Engine 2: GPT-SoVITS (Port 5001) - Indonesian Native
-     * Engine 3: ElevenLabs (Port 5002) - Premium Quality
      */
     public function clone(Request $request)
     {
@@ -22,7 +21,7 @@ class VoiceChangerController extends Controller
         $request->validate([
             'audio' => 'required|file|max:35000', // max 35MB
             'text' => 'required|string|max:500',
-            'engine' => 'nullable|in:xtts,gptsovits,elevenlabs', // Pemilihan engine
+            'engine' => 'nullable|in:xtts,gptsovits', // Pemilihan engine
         ]);
 
         $audio = $request->file('audio');
@@ -42,29 +41,24 @@ class VoiceChangerController extends Controller
             'updated_at' => now(),
         ]);
 
-        // Map port berdasarkan engine
-        $ports = [
-            'xtts' => 5000,
-            'gptsovits' => 5001,
-            'elevenlabs' => 5002
-        ];
-
-        $port = $ports[$enginePreference] ?? 5000;
+        // Map base URL berdasarkan engine dari .env
+        $baseUrl = $enginePreference === 'gptsovits'
+            ? env('AI_GPTSOVITS_URL', 'http://localhost:5001')
+            : env('AI_XTTS_URL', 'http://localhost:5000');
 
         try {
-            // Kirim ke server Python (Timeout 5 menit karena AI berat)
+            // Kirim ke server Python (Timeout 300 detik)
             $response = Http::timeout(300)->attach(
                 'audio',
                 file_get_contents($audio->getRealPath()),
                 'ref.wav'
-            )->post("http://localhost:{$port}/clone", [
+            )->post("{$baseUrl}/clone", [
                 'text' => $text,
             ]);
 
             if ($response->successful() && strlen($response->body()) > 0) {
-                // ElevenLabs output MP3, lainnya WAV. Kita simpan sesuai ekstensi respons.
-                $ext = $enginePreference === 'elevenlabs' ? 'mp3' : 'wav';
-                $filename = 'generated/' . uniqid() . '.' . $ext;
+                // Semua output sekarang dalam format WAV
+                $filename = 'generated/' . uniqid() . '.wav';
 
                 Storage::disk('public')->put($filename, $response->body());
 
@@ -76,7 +70,7 @@ class VoiceChangerController extends Controller
                 ]);
 
                 return response($response->body(), 200)
-                    ->header('Content-Type', $enginePreference === 'elevenlabs' ? 'audio/mpeg' : 'audio/wav')
+                    ->header('Content-Type', 'audio/wav')
                     ->header('X-Voice-Engine', $enginePreference);
             }
 
@@ -101,27 +95,35 @@ class VoiceChangerController extends Controller
         }
     }
 
-    /**
-     * Get engine status
-     */
     public function engineStatus()
     {
         $engines = [
-            'xtts' => ['port' => 5000, 'name' => 'XTTS v2', 'quality' => 'Free / Good'],
-            'gptsovits' => ['port' => 5001, 'name' => 'GPT-SoVITS', 'quality' => 'Indonesian Native'],
-            'elevenlabs' => ['port' => 5002, 'name' => 'ElevenLabs', 'quality' => 'Premium']
+            'xtts' => [
+                'url' => env('AI_XTTS_URL', 'http://localhost:5000'),
+                'name' => 'XTTS v2',
+                'quality' => 'Free / Good'
+            ],
+            'gptsovits' => [
+                'url' => env('AI_GPTSOVITS_URL', 'http://localhost:5001'),
+                'name' => 'GPT-SoVITS',
+                'quality' => 'Indonesian Native'
+            ]
         ];
 
         $results = [];
         foreach ($engines as $key => $info) {
             try {
-                $status = Http::timeout(1)->get("http://localhost:{$info['port']}/health");
+                $status = Http::timeout(2)->get("{$info['url']}/health");
                 $results[$key] = array_merge($info, [
                     'available' => $status->successful(),
+                    'port' => parse_url($info['url'], PHP_URL_PORT),
                     'details' => $status->json()
                 ]);
             } catch (\Exception $e) {
-                $results[$key] = array_merge($info, ['available' => false]);
+                $results[$key] = array_merge($info, [
+                    'available' => false,
+                    'port' => parse_url($info['url'], PHP_URL_PORT)
+                ]);
             }
         }
 

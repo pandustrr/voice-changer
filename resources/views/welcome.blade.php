@@ -73,6 +73,8 @@
 </head>
 
 <body class="antialiased selection:bg-indigo-500/30">
+    @include('navbar')
+
     <div class="fixed top-0 left-0 w-full h-full pointer-events-none z-[-1] overflow-hidden">
         <div class="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-indigo-500/10 blur-[120px] rounded-full"></div>
         <div class="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple-500/10 blur-[120px] rounded-full"></div>
@@ -100,7 +102,6 @@
                         <div class="w-12 h-12 rounded-2xl bg-indigo-500/20 flex items-center justify-center text-indigo-400 font-bold text-xl border border-indigo-500/20">1</div>
                         <div>
                             <h2 class="text-2xl font-bold">Voice Initialization</h2>
-                            <p class="text-gray-500 text-sm italic">Filmora Style - High Fidelity Capture</p>
                         </div>
                     </div>
 
@@ -157,11 +158,10 @@
                 <div class="mb-6">
                     <label class="block text-sm font-semibold text-gray-400 mb-3">AI Engine Selection</label>
                     <select id="engineSelector" disabled class="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all">
-                        <option value="xtts">XTTS v2 - Fast & Free (Quality: 70%)</option>
-                        <option value="elevenlabs" selected>ElevenLabs - Premium Quality (95%+) ⭐</option>
+                        <option value="xtts" selected>XTTS v2 - Fast & Free (Quality: 70%)</option>
                         <option value="gptsovits">GPT-SoVITS - Indonesian Native (90%)</option>
                     </select>
-                    <p class="text-xs text-gray-600 mt-2 italic">💡 ElevenLabs recommended for best Indonesian articulation</p>
+                    <p class="text-xs text-gray-600 mt-2 italic">💡 GPT-SoVITS recommended for best Indonesian articulation</p>
                 </div>
 
                 <div class="relative">

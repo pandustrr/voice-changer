@@ -100,5 +100,9 @@ def clone_voice():
         except:
              return f"AI Engine Error: {str(e)}", 500
 
+@app.route('/health', methods=['GET'])
+def health():
+    return {"status": "ok", "engine": "XTTSv2-Phonetic", "device": device}
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
