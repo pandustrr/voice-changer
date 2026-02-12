@@ -22,11 +22,15 @@ class VoiceChangerController extends Controller
             'audio' => 'required|file|max:35000', // max 35MB
             'text' => 'required|string|max:500',
             'engine' => 'nullable|in:xtts,gptsovits', // Pemilihan engine
+            'reference_text' => 'nullable|string|max:500', // Teks yang diucapkan di rekaman
+            'speed' => 'nullable|numeric|min:0.5|max:2.0', // Kontrol kecepatan bicara
         ]);
 
         $audio = $request->file('audio');
         $text = $request->input('text');
         $enginePreference = $request->input('engine', 'xtts');
+        $referenceText = $request->input('reference_text', ''); // PENTING untuk kemiripan
+        $speed = $request->input('speed', 1.0);
 
         // Gunakan Auth facade yang lebih stabil
         $userId = Auth::check() ? Auth::id() : null;
@@ -48,13 +52,21 @@ class VoiceChangerController extends Controller
 
         try {
             // Kirim ke server Python (Timeout 300 detik)
+            $postData = [
+                'text' => $text,
+                'speed' => $speed,
+            ];
+
+            // Kirim reference_text jika ada (untuk GPT-SoVITS)
+            if (!empty($referenceText)) {
+                $postData['reference_text'] = $referenceText;
+            }
+
             $response = Http::timeout(300)->attach(
                 'audio',
                 file_get_contents($audio->getRealPath()),
                 'ref.wav'
-            )->post("{$baseUrl}/clone", [
-                'text' => $text,
-            ]);
+            )->post("{$baseUrl}/clone", $postData);
 
             if ($response->successful() && strlen($response->body()) > 0) {
                 // Semua output sekarang dalam format WAV

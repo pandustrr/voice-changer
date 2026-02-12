@@ -16,10 +16,10 @@ def clean_text(text, language, version=None):
         version = os.environ.get("version", "v2")
     if version == "v1":
         symbols = symbols_v1.symbols
-        language_module_map = {"zh": "chinese", "ja": "japanese", "en": "english", "id": "english"}
+        language_module_map = {"zh": "chinese", "ja": "japanese", "en": "english", "id": "indonesian"}
     else:
         symbols = symbols_v2.symbols
-        language_module_map = {"zh": "chinese2", "ja": "japanese", "en": "english", "ko": "korean", "yue": "cantonese", "id": "english"}
+        language_module_map = {"zh": "chinese2", "ja": "japanese", "en": "english", "ko": "korean", "yue": "cantonese", "id": "indonesian"}
 
     if language not in language_module_map:
         language = "en"
@@ -40,7 +40,7 @@ def clean_text(text, language, version=None):
         phones, word2ph = language_module.g2p(norm_text)
         assert len(phones) == sum(word2ph)
         assert len(norm_text) == len(word2ph)
-    elif language == "en" or language == "id": # Gunakan logika english untuk id
+    elif language == "en" or language == "id": # Gunakan logika native untuk id
         phones = language_module.g2p(norm_text)
         if len(phones) < 4:
             phones = [","] + phones
@@ -58,10 +58,10 @@ def clean_special(text, language, special_s, target_symbol, version=None):
         version = os.environ.get("version", "v2")
     if version == "v1":
         symbols = symbols_v1.symbols
-        language_module_map = {"zh": "chinese", "ja": "japanese", "en": "english", "id": "english"}
+        language_module_map = {"zh": "chinese", "ja": "japanese", "en": "english", "id": "indonesian"}
     else:
         symbols = symbols_v2.symbols
-        language_module_map = {"zh": "chinese2", "ja": "japanese", "en": "english", "ko": "korean", "yue": "cantonese", "id": "english"}
+        language_module_map = {"zh": "chinese2", "ja": "japanese", "en": "english", "ko": "korean", "yue": "cantonese", "id": "indonesian"}
 
     text = text.replace(special_s, ",")
     language_module = __import__("text." + language_module_map[language], fromlist=[language_module_map[language]])

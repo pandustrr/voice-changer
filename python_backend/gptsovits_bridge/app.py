@@ -1,6 +1,6 @@
 """
-GPT-SoVITS Bridge Server v2.5 - ULTRA-ROBUST
-Indonesian Native + Fallback (No FFmpeg required)
+GPT-SoVITS Bridge Server v2.9 - NATIVE INDONESIAN
+Indonesian Native Voice Cloning with custom indonesian.py support
 """
 
 import os
@@ -17,27 +17,11 @@ import numpy as np
 app = Flask(__name__)
 CORS(app)
 
-UPLOAD_FOLDER = os.path.join(os.getcwd(), 'temp_audio')
+UPLOAD_FOLDER = 'C:\\Temp\\voice_changer_temp'
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
 
 GSV_API_URL = "http://127.0.0.1:9880/tts"
-
-# Lazy load whisper untuk menghindari error saat startup jika ffmpeg tidak ada
-_stt_model = None
-
-def get_stt_model():
-    global _stt_model
-    if _stt_model is None:
-        try:
-            import whisper
-            device = "cuda" if os.environ.get("USE_GPU") == "1" else "cpu"
-            print(f"📦 Loading Whisper model...")
-            _stt_model = whisper.load_model("base")
-        except:
-            print("⚠️ Whisper failed to load. Using empty prompt fallback.")
-            _stt_model = False
-    return _stt_model
 
 def python_trim_audio(input_path, output_path):
     """Memotong audio menggunakan Librosa (7 detik dari tengah)"""
@@ -62,6 +46,9 @@ def clone_voice():
     
     audio_file = request.files['audio']
     text = request.form['text']
+    reference_text = request.form.get('reference_text', '')
+    speed = float(request.form.get('speed', 1.2))
+    
     u_id = str(uuid.uuid4())
     
     raw_path = os.path.abspath(os.path.join(UPLOAD_FOLDER, f"raw_{u_id}.wav"))
@@ -76,54 +63,56 @@ def clone_voice():
         success = python_trim_audio(raw_path, ref_path)
         final_ref = ref_path if success and os.path.exists(ref_path) else raw_path
         
-        # Auto-Transcribe dengan error handling ([WinError 2] fix)
-        prompt_text = ""
-        try:
-            model = get_stt_model()
-            if model:
-                print(f"[WHISPER] Transcribing...")
-                # Whisper butuh ffmpeg. Jika tdk ada, bagian ini akan error.
-                # Kita tangkap errornya agar tidak mematikan seluruh server.
-                result = model.transcribe(final_ref, language="id")
-                prompt_text = result.get("text", "").strip()
-                print(f"[WHISPER] Prompt: \"{prompt_text}\"")
-        except Exception as stt_err:
-            print(f"⚠️ STT Skip: {stt_err} (Mungkin FFmpeg tidak ada)")
-            prompt_text = ""
-
-        # Generate Voice
-        print(f"[GSV-BRIDGE] Generating Native Indo Voice...")
+        # Gunakan reference_text jika ada
+        prompt_text = reference_text if reference_text else ""
+        
+        print(f"[NATIVE-ID] Using manual reference: \"{prompt_text}\"")
+        
+        # KUNCI FINAL: Gunakan 'id' secara native (dibantu indonesian.py)
+        print(f"[GSV-BRIDGE] Generating NATIVE INDONESIAN voice...")
+        
         payload = {
             "text": text,
-            "text_lang": "id", 
+            "text_lang": "id",
             "ref_audio_path": final_ref,
             "prompt_lang": "id",
             "prompt_text": prompt_text,
-            "media_type": "wav"
+            "media_type": "wav",
+            "text_split_method": "cut0",
+            "top_k": 10,  # Balanced (tidak terlalu tinggi)
+            "top_p": 0.75,  # Balanced untuk natural sound
+            "temperature": 0.65,  # Lebih rendah = lebih stabil dan mirip referensi
+            "speed_factor": speed,
+            "repetition_penalty": 1.15,  # Sedikit lebih rendah
         }
         
         time.sleep(0.3)
         response = requests.get(GSV_API_URL, params=payload, timeout=300)
         
         if response.status_code == 200:
+            # Simpan WAV dari API
             with open(out_path, "wb") as f:
                 f.write(response.content)
+            
+            print("[SUCCESS] Native Indonesian voice generated (WAV)!")
             return send_file(out_path, mimetype='audio/wav')
         else:
-            return f"API Error: {response.text}", 500
+            error_msg = response.text
+            print(f"[ERROR] API returned: {error_msg}")
+            return f"API Error: {error_msg}", 500
             
     except Exception as e:
         traceback.print_exc()
         return f"Bridge failure: {str(e)}", 500
     finally:
-        for p in [raw_path, ref_path]:
+        for p in [raw_path, ref_path, out_path]:
             if os.path.exists(p):
                 try: os.remove(p)
                 except: pass
 
 @app.route('/health', methods=['GET'])
 def health():
-    return {"status": "online", "engine": "GPT-SoVITS-Robust-V2.5"}
+    return {"status": "online", "engine": "GPT-SoVITS-V2.9-NativeIndonesian"}
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5001, debug=True)

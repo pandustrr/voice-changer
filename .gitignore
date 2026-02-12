@@ -1,27 +1,59 @@
-# Python stuff
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
+*.so
+.Python
+env/
 venv/
-.env
+venv_*/
+ENV/
+env.bak/
+venv.bak/
 
-# AI Models (Too heavy for GitHub)
-python_backend/GPT-SoVITS/pretrained_models/
-python_backend/models/
-python_backend/tts_models/
+# Virtual environments
+python_backend/venv_xtts/
+python_backend/venv_gptsovits/
+python_backend/venv/
 
-# Temporary Audio Files
-python_backend/temp_audio/
-public/storage/references/
-public/storage/generated/
+# Temporary files
+*.wav
+*.mp3
+temp_audio/
+temp_xtts/
+C:/Temp/
 
-# Laravel stuff
-/vendor
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Laravel
 /node_modules
+/public/hot
 /public/storage
 /storage/*.key
+/vendor
 .env
 .env.backup
-.env.production
-composer.lock
-package-lock.json
+.phpunit.result.cache
+Homestead.json
+Homestead.yaml
+npm-debug.log
+yarn-error.log
+
+# Models (terlalu besar)
+*.pth
+*.ckpt
+*.safetensors
+pretrained_models/
+GPT_weights/
+SoVITS_weights/
+
+# Logs
+*.log

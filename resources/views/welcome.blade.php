@@ -115,7 +115,7 @@
                                 <div id="stopIcon" class="hidden w-8 h-8 bg-white rounded-lg"></div>
                             </div>
                         </div>
-                        <p id="recordStatus" class="mt-8 text-gray-400 font-medium tracking-wide">Press to start recording (5-10 sec)</p>
+                        <p id="recordStatus" class="mt-8 text-gray-400 font-medium tracking-wide">Press to start recording</p>
 
                         <div class="flex items-center gap-4 mt-8 w-full max-w-xs">
                             <div class="h-px flex-1 bg-white/10"></div>
@@ -139,6 +139,22 @@
                                 <span class="text-sm font-medium">Reference Audio Captured</span>
                             </div>
                             <audio id="audioPreview" controls class="w-full opacity-80"></audio>
+
+                            <!-- Reference Text Input (IMPORTANT for voice similarity) -->
+                            <div class="mt-4 space-y-2">
+                                <label class="text-xs font-semibold text-gray-400 flex items-center gap-2">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    What did you say in this recording? (Optional but HIGHLY recommended)
+                                </label>
+                                <textarea
+                                    id="referenceText"
+                                    class="w-full bg-black/40 border border-yellow-500/30 rounded-xl p-3 text-white text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500/50 placeholder:text-gray-600 transition-all resize-none"
+                                    rows="2"
+                                    placeholder="e.g., Halo, nama saya Pandu. Selamat datang di aplikasi voice cloning..."></textarea>
+                                <p class="text-xs text-gray-600 italic">💡 Typing what you said helps AI clone your voice MORE accurately!</p>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -155,14 +171,23 @@
                 </div>
 
                 <!-- AI Engine Selector -->
-                <div class="mb-6">
-                    <label class="block text-sm font-semibold text-gray-400 mb-3">AI Engine Selection</label>
-                    <select id="engineSelector" disabled class="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all">
-                        <option value="xtts" selected>XTTS v2 - Fast & Free (Quality: 70%)</option>
-                        <option value="gptsovits">GPT-SoVITS - Indonesian Native (90%)</option>
-                    </select>
-                    <p class="text-xs text-gray-600 mt-2 italic">💡 GPT-SoVITS recommended for best Indonesian articulation</p>
+                <div class="mb-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-400 mb-3">AI Engine Selection</label>
+                        <select id="engineSelector" disabled class="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all">
+                            <option value="xtts" selected>XTTS v2 - Fast & Free (Native ID)</option>
+                            <option value="gptsovits">GPT-SoVITS - Ultra Quality (Native ID)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-400 mb-3">Speech Speed</label>
+                        <div class="flex items-center gap-4 bg-black/40 border border-white/10 rounded-xl p-3.5">
+                            <input type="range" id="speedSelector" min="0.5" max="2.0" step="0.1" value="1.1" class="flex-1 accent-indigo-500">
+                            <span id="speedValue" class="text-indigo-400 font-bold min-w-12 text-center">1.1x</span>
+                        </div>
+                    </div>
                 </div>
+                <p class="text-xs text-gray-600 mb-6 italic">💡 Native Indonesian support enabled for all engines. Adjust speed for natural flow.</p>
 
                 <div class="relative">
                     <textarea id="textInput" disabled class="w-full bg-black/40 border border-white/10 rounded-2xl p-8 text-white text-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/50 placeholder:text-gray-600 transition-all resize-none shadow-inner" rows="4" placeholder="Enter the text you want your voice to speak..."></textarea>
@@ -233,6 +258,12 @@
 
             const recordBtn = document.getElementById('recordBtn');
             const recordBtnCircle = document.getElementById('recordBtnCircle');
+            const speedSelector = document.getElementById('speedSelector');
+            const speedValue = document.getElementById('speedValue');
+
+            speedSelector.addEventListener('input', () => {
+                speedValue.textContent = speedSelector.value + 'x';
+            });
             const micIcon = document.getElementById('micIcon');
             const stopIcon = document.getElementById('stopIcon');
             const recordStatus = document.getElementById('recordStatus');
@@ -409,6 +440,16 @@
                 formData.append('audio', finalWavBlob, 'reference.wav');
                 formData.append('text', text);
                 formData.append('engine', engineSelector.value);
+
+                // Add speed parameter
+                const speed = document.getElementById('speedSelector').value;
+                formData.append('speed', speed);
+
+                // IMPORTANT: Send what user said in the recording (if provided)
+                const referenceText = document.getElementById('referenceText').value.trim();
+                if (referenceText) {
+                    formData.append('reference_text', referenceText);
+                }
 
                 try {
                     const response = await fetch('/api/clone-voice', {
