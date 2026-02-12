@@ -21,15 +21,15 @@ class VoiceChangerController extends Controller
         $request->validate([
             'audio' => 'required|file|max:35000', // max 35MB
             'text' => 'required|string|max:500',
-            'engine' => 'nullable|in:xtts,gptsovits', // Pemilihan engine
-            'reference_text' => 'nullable|string|max:500', // Teks yang diucapkan di rekaman
-            'speed' => 'nullable|numeric|min:0.5|max:2.0', // Kontrol kecepatan bicara
+            'engine' => 'nullable|in:xtts,gptsovits,elevenlabs', // Tambah elevenlabs
+            'reference_text' => 'nullable|string|max:500',
+            'speed' => 'nullable|numeric|min:0.5|max:2.0',
         ]);
 
         $audio = $request->file('audio');
         $text = $request->input('text');
         $enginePreference = $request->input('engine', 'xtts');
-        $referenceText = $request->input('reference_text', ''); // PENTING untuk kemiripan
+        $referenceText = $request->input('reference_text', '');
         $speed = $request->input('speed', 1.0);
 
         // Gunakan Auth facade yang lebih stabil
@@ -46,9 +46,11 @@ class VoiceChangerController extends Controller
         ]);
 
         // Map base URL berdasarkan engine dari .env
-        $baseUrl = $enginePreference === 'gptsovits'
-            ? env('AI_GPTSOVITS_URL', 'http://localhost:5001')
-            : env('AI_XTTS_URL', 'http://localhost:5000');
+        $baseUrl = match ($enginePreference) {
+            'gptsovits' => env('AI_GPTSOVITS_URL', 'http://localhost:5001'),
+            'elevenlabs' => env('AI_ELEVENLABS_URL', 'http://localhost:5002'),
+            default => env('AI_XTTS_URL', 'http://localhost:5000'),
+        };
 
         try {
             // Kirim ke server Python (Timeout 300 detik)

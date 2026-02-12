@@ -9,6 +9,10 @@ from flask import Flask, request, send_file, jsonify
 from flask_cors import CORS
 import requests
 import uuid
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 app = Flask(__name__)
 CORS(app)
