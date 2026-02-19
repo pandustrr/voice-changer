@@ -124,6 +124,30 @@ class VoiceChangerController extends Controller
         }
     }
 
+    public function startTraining(Request $request)
+    {
+        // Dataset path yang tadi kita upload ke R2
+        $datasetPath = "datasets/my_voice/";
+        $runpodService = new \App\Services\RunpodService();
+
+        try {
+            // Memanggil RunPod (Atau Local AI Server jika RunPod API Key kosong)
+            $response = $runpodService->train([
+                'user_id' => 'guest_admin',
+                'audio_path' => $datasetPath,
+                'model_name' => 'premium_voice_' . time()
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Training Premium berhasil dipicu!',
+                'data' => $response
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
     public function engineStatus()
     {
         $engines = [

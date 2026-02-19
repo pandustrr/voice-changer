@@ -9,32 +9,36 @@ class RunpodService
     /**
      * Trigger training task on Runpod
      */
-    public function startTraining($user_id, $audio_path)
+    public function train(array $params)
     {
-        $apiKey = config('services.runpod.api_key');
-        $trainingUrl = env('AI_TRAINING_URL', 'http://127.0.0.1:5000/train');
+        $apiKey = env('RUNPOD_API_KEY');
+        $trainingUrl = env('AI_TRAINING_URL', 'http://127.0.0.1:8001/train');
 
         if (!$apiKey) {
-            // Local Fallback
-            Http::asForm()->post($trainingUrl, [
-                'user_id' => $user_id,
-                'audio_path' => $audio_path
-            ]);
+            // Local Fallback (Ke worker lokal kita di port 8001)
+            $response = Http::post($trainingUrl, $params);
 
             return [
                 'status' => 'success',
                 'mode' => 'local',
-                'message' => 'Training started locally for user ' . $user_id
+                'response' => $response->json(),
+                'message' => 'Training started on local worker.'
             ];
         }
 
-        // request ke Runpod Serverless / Pod
-        // $response = Http::withToken($apiKey)->post('https://api.runpod.ai/...', ...);
+        // Request ke Runpod API
+        $response = Http::withHeaders([
+            'Authorization' => "Bearer $apiKey",
+            'Content-Type' => 'application/json',
+        ])->post($trainingUrl, [
+            'input' => $params // Runpod Serverless biasanya membungkus dalam 'input'
+        ]);
 
         return [
             'status' => 'success',
             'mode' => 'runpod',
-            'message' => 'Training triggerred on Runpod for user ' . $user_id
+            'response' => $response->json(),
+            'message' => 'Training triggered on Runpod Cloud.'
         ];
     }
 }

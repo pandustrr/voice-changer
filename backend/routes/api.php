@@ -10,6 +10,7 @@ Route::get('/user', function (Request $request) {
 
 Route::post('/initialize-voice', [VoiceChangerController::class, 'initializeVoice']);
 Route::post('/clone-voice', [VoiceChangerController::class, 'clone']);
+Route::post('/start-training', [VoiceChangerController::class, 'startTraining']);
 Route::get('/engine-status', [VoiceChangerController::class, 'engineStatus']);
 
 // New SaaS Routes
