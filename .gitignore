@@ -1,3 +1,9 @@
+# MacOS
+.DS_Store
+
+# Windows
+Thumbs.db
+
 # Python
 __pycache__/
 *.py[cod]
@@ -8,52 +14,30 @@ env/
 venv/
 venv_*/
 ENV/
-env.bak/
-venv.bak/
-
-# Virtual environments
-python_backend/venv_xtts/
-python_backend/venv_gptsovits/
-python_backend/venv/
-
-# Temporary files
-*.wav
-*.mp3
-temp_audio/
-temp_xtts/
-C:/Temp/
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Laravel
-/node_modules
-/public/hot
-/public/storage
-/storage/*.key
-/vendor
-.env
-.env.backup
-.phpunit.result.cache
-Homestead.json
-Homestead.yaml
-npm-debug.log
-yarn-error.log
-
-# Models (terlalu besar)
 *.pth
 *.ckpt
 *.safetensors
-pretrained_models/
-GPT_weights/
-SoVITS_weights/
 
-# Logs
+# Laravel / Backend
+backend/.env
+backend/node_modules/
+backend/vendor/
+backend/public/storage/
+backend/storage/*.key
+backend/storage/app/public/models/*
+backend/storage/app/public/references/*
+
+# AI Training / Generation
+ai-training-runpod/.env
+ai-training-runpod/temp_training_*
+ai-training-runpod/training/wavs/*
+ai-training-runpod/training/metadata.csv
+
+# Modal caches
+.modal/
+.modal.toml
+
+# Others
+.agent/
+.gemini/
 *.log

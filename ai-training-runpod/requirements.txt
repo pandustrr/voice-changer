@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+pydub
+TTS
+torch
+SpeechRecognition
+pandas
+librosa
+soundfile
+boto3
+python-dotenv
