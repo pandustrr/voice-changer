@@ -29,6 +29,7 @@ import torch
 from TTS.tts.configs.xtts_config import XttsConfig
 from TTS.tts.models.xtts import Xtts
 from trainer import Trainer, TrainerArgs
+from app.core.indo_cleaner import clean_indonesian_for_xtts
 
 # Patch torch.load untuk kompatibilitas
 orig_load = torch.load
@@ -55,9 +56,11 @@ os.makedirs(OUTPUT_PATH, exist_ok=True)
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"🖥️  Device: {device}")
 if device == "cpu":
-    print("⚠️  WARNING: Training tanpa GPU akan SANGAT lambat!")
-    print("   Rekomendasi: Gunakan Google Colab dengan GPU gratis")
     print("   https://colab.research.google.com/")
+    vram = 0
+else:
+    vram = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+    print(f"📟 VRAM: {vram:.2f} GB")
 
 # ============================================
 # LOAD BASE MODEL
@@ -108,11 +111,12 @@ print(f"✅ Dataset found: {num_samples} samples")
 # Training arguments
 training_args = TrainerArgs(
     # Epochs (iterasi training)
-    epochs=10,  # Bisa dinaikkan untuk hasil lebih baik (20-50)
+    epochs=30,  # Ditingkatkan untuk kualitas "sangat bagus" (30-50)
     
-    # Batch size (OPTIMIZED untuk GTX 1650 4GB VRAM)
-    batch_size=1,  # KECIL untuk GPU 4GB (jangan naikkan!)
-    grad_accum_steps=4,  # Akumulasi gradient untuk kompensasi batch kecil
+    # Batch size & Gradient Accumulation
+    # OPTIMASI UNTUK RTX 4090 (24GB VRAM)
+    batch_size=4 if vram > 16 else 1,
+    grad_accum_steps=1 if vram > 16 else 4,
     
     # Learning rate
     lr=5e-6,  # Learning rate rendah untuk fine-tuning
@@ -144,6 +148,18 @@ config.dataset_config = {
     "path": DATASET_PATH,
     "language": "id"
 }
+
+# Apply Indonesian Cleaner to metadata
+print("🧹 Cleaning transcripts with Indonesian Cleaner...")
+with open(METADATA_FILE, 'r', encoding='utf-8') as f:
+    lines = f.readlines()
+
+with open(METADATA_FILE, 'w', encoding='utf-8') as f:
+    for line in lines:
+        filename, text = line.strip().split("|")
+        cleaned_text = clean_indonesian_for_xtts(text)
+        f.write(f"{filename}|{cleaned_text}\n")
+print("✅ Transcripts cleaned.")
 
 # ============================================
 # START TRAINING
