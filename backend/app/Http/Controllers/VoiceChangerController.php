@@ -21,7 +21,7 @@ class VoiceChangerController extends Controller
         ]);
 
         $audio = $request->file('audio');
-        $baseUrl = env('AI_XTTS_URL', 'http://localhost:5000');
+        $baseUrl = env('AI_GENERATE_URL', 'http://localhost:5000');
 
         try {
             $response = Http::timeout(60)->attach(
@@ -64,17 +64,22 @@ class VoiceChangerController extends Controller
         $speed = $request->input('speed', 1.0);
         $userId = Auth::check() ? Auth::id() : null;
 
-        // Simpan data transaksi ke database
-        $generationId = DB::table('voice_generations')->insertGetId([
-            'user_id' => $userId,
-            'input_text' => $text,
-            'reference_audio_path' => $request->hasFile('audio') ? $request->file('audio')->store('references', 'public') : 'using_cached_speaker',
-            'status' => 'processing',
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
+        // Simpan data transaksi ke database (Opsional jika DB belum siap)
+        $generationId = null;
+        try {
+            $generationId = DB::table('voice_generations')->insertGetId([
+                'user_id' => $userId,
+                'input_text' => $text,
+                'reference_audio_path' => $request->hasFile('audio') ? $request->file('audio')->store('references', 'public') : 'using_cached_speaker',
+                'status' => 'processing',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        } catch (\Exception $e) {
+            // Silently fail if DB not ready
+        }
 
-        $baseUrl = env('AI_XTTS_URL', 'http://localhost:5000');
+        $baseUrl = env('AI_GENERATE_URL', 'http://localhost:5000');
 
         try {
             $postData = [
@@ -99,12 +104,17 @@ class VoiceChangerController extends Controller
                 $filename = 'generated/' . uniqid() . '.wav';
                 Storage::disk('public')->put($filename, $response->body());
 
-                // Update status sukses
-                DB::table('voice_generations')->where('id', $generationId)->update([
-                    'result_audio_path' => $filename,
-                    'status' => 'completed',
-                    'updated_at' => now(),
-                ]);
+                // Update status sukses ke DB
+                if ($generationId) {
+                    try {
+                        DB::table('voice_generations')->where('id', $generationId)->update([
+                            'result_audio_path' => $filename,
+                            'status' => 'completed',
+                            'updated_at' => now(),
+                        ]);
+                    } catch (\Exception $e) {
+                    }
+                }
 
                 // Return both binary audio and persistent URL
                 $fileUrl = asset('storage/' . $filename);
@@ -116,7 +126,12 @@ class VoiceChangerController extends Controller
             }
 
             $pythonError = $response->body() ?: 'Unknown AI error';
-            DB::table('voice_generations')->where('id', $generationId)->update(['status' => 'failed']);
+            if ($generationId) {
+                try {
+                    DB::table('voice_generations')->where('id', $generationId)->update(['status' => 'failed']);
+                } catch (\Exception $e) {
+                }
+            }
 
             return response()->json(['error' => 'AI Engine Error: ' . $pythonError], 500);
         } catch (\Exception $e) {
@@ -152,7 +167,7 @@ class VoiceChangerController extends Controller
     {
         $engines = [
             'xtts' => [
-                'url' => env('AI_XTTS_URL', 'http://127.0.0.1:5000'),
+                'url' => env('AI_GENERATE_URL', 'http://127.0.0.1:5000'),
                 'name' => 'XTTS v2',
                 'quality' => 'Optimization: Indonesian'
             ]
