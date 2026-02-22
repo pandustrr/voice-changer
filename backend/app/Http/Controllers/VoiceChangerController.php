@@ -179,13 +179,30 @@ class VoiceChangerController extends Controller
                 $this->storage->uploadToCloud($fullLocalPath, $datasetPath);
                 @unlink($fullLocalPath);
             } else {
-                // No file found
-                $contentLength = $request->getContentLength();
-                Log::error("❌ ERROR: File tidak ditemukan di request. Content-Length: $contentLength bytes. Cek post_max_size PHP.");
+                // Skema B: Tidak ada file di request, cari file TERBESAR di folder references
+                Log::info("DEBUG: Tidak ada file di request. Mencari file TERBESAR di storage references...");
 
-                return response()->json([
-                    'error' => 'Gagal: File audio 30 menit (300MB+) Anda tidak terbaca oleh server. Kemungkinan upload terputus atau batas limit PHP (post_max_size) terlalu kecil.'
-                ], 422);
+                $allFiles = Storage::disk('public')->files('references');
+
+                // Urutkan berdasarkan ukuran (paling besar di atas)
+                $largestFile = collect($allFiles)->sortByDesc(function ($file) {
+                    return Storage::disk('public')->size($file);
+                })->first();
+
+                if ($largestFile) {
+                    $fullLocalPath = storage_path('app/public/' . $largestFile);
+                    $fileSizeMB = round(Storage::disk('public')->size($largestFile) / 1024 / 1024, 2);
+                    $datasetPath = "training/raw/auto_" . time() . "_" . basename($largestFile);
+
+                    Log::info("✅ Ditemukan file besar di storage: " . basename($largestFile) . " ($fileSizeMB MB)");
+                    $this->storage->uploadToCloud($fullLocalPath, $datasetPath);
+                } else {
+                    $contentLength = $request->getContentLength();
+                    Log::error("❌ ERROR: File tidak ditemukan. Content-Length: $contentLength bytes.");
+                    return response()->json([
+                        'error' => 'Gagal: File audio 30 menit tidak ditemukan. Silakan upload ulang di kotak atas.'
+                    ], 422);
+                }
             }
 
             if (!$datasetPath) {
