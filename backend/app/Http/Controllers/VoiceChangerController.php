@@ -9,8 +9,20 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 
+use App\Services\RunpodService;
+use App\Services\StorageService;
+
 class VoiceChangerController extends Controller
 {
+    protected $runpod;
+    protected $storage;
+
+    public function __construct(RunpodService $runpod, StorageService $storage)
+    {
+        $this->runpod = $runpod;
+        $this->storage = $storage;
+    }
+
     /**
      * Step 1: Voice Initialization
      * Upload audio dan ambil ID embedding dari Python
@@ -142,32 +154,30 @@ class VoiceChangerController extends Controller
 
     public function startTraining(Request $request)
     {
-        Log::info("DEBUG: Memulai StartTraining");
-
-        // VALIDASI: Paksa harus ada file audio yang di-upload!
-        $request->validate([
-            'audio' => 'required|file|mimes:wav,mp3,m4a|max:51200'
-        ]);
-
-        $userId = Auth::check() ? Auth::id() : 'guest_admin';
-        $audioFile = $request->file('audio');
-
-        // Alur R2
-        $storage = new \App\Services\StorageService();
-        $tempPath = $audioFile->store('temp_audio', 'public');
-        $fullLocalPath = storage_path('app/public/' . $tempPath);
-
-        $cloudPath = "training/raw/" . $userId . "/" . time() . "_" . $audioFile->getClientOriginalName();
-        Log::info("DEBUG: Uploading ke R2: $cloudPath");
-
-        $storage->uploadToCloud($fullLocalPath, $cloudPath);
-        @unlink($fullLocalPath);
-
-        $runpodService = new \App\Services\RunpodService();
-
         try {
+            Log::info("DEBUG: Memulai StartTraining");
+
+            // VALIDASI: Paksa harus ada file audio yang di-upload!
+            $request->validate([
+                'audio' => 'required|file|mimes:wav,mp3,m4a|max:51200'
+            ]);
+
+            $userId = Auth::check() ? Auth::id() : 'guest_admin';
+            $audioFile = $request->file('audio');
+
+            // Alur R2
+            $tempPath = $audioFile->store('temp_audio', 'public');
+            $fullLocalPath = storage_path('app/public/' . $tempPath);
+
+            $cloudPath = "training/raw/" . $userId . "/" . time() . "_" . $audioFile->getClientOriginalName();
+            Log::info("DEBUG: Uploading ke R2: $cloudPath");
+
+            // Gunakan $this->storage yang sudah di-inject di constructor
+            $this->storage->uploadToCloud($fullLocalPath, $cloudPath);
+            @unlink($fullLocalPath);
+
             // Memanggil RunPod
-            $response = $runpodService->train([
+            $response = $this->runpod->train([
                 'user_id' => (string)$userId,
                 'audio_path' => $cloudPath, // Sekarang pasti file asli dari R2
                 'model_name' => 'premium_voice_' . time(),
@@ -180,6 +190,7 @@ class VoiceChangerController extends Controller
                 'data' => $response
             ]);
         } catch (\Exception $e) {
+            Log::error("❌ ERROR TRAINING: " . $e->getMessage());
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
