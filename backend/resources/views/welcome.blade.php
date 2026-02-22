@@ -126,6 +126,21 @@
                     </label>
                 </div>
 
+                <!-- Premium Training Section (Dataset 30 Menit) -->
+                <div class="mt-6 p-4 bg-indigo-500/5 border border-indigo-500/20 rounded-xl">
+                    <div class="flex justify-between items-center mb-3">
+                        <h4 class="text-sm font-bold text-indigo-400 uppercase tracking-widest">Premium Fine-Tuning</h4>
+                        <span class="px-2 py-0.5 bg-indigo-500 text-[10px] font-bold text-white rounded">Dataset Ready</span>
+                    </div>
+                    <p class="text-xs text-slate-400 mb-4 italic">Gunakan audio 30 menit untuk hasil suara yang sangat natural.</p>
+                    <button id="startTrainBtn" class="w-full bg-slate-900 hover:bg-indigo-600 border border-indigo-500/30 text-indigo-400 hover:text-white font-bold py-3 rounded-lg transition-all text-sm">
+                        Mulai Latih Suara Premium (Fine-Tuning)
+                    </button>
+                    <div id="trainStatus" class="hidden mt-3 text-xs text-center font-medium text-indigo-300 animate-pulse">
+                        Sedang berkomunikasi dengan GPU RunPod...
+                    </div>
+                </div>
+
                 <!-- Preview Box -->
                 <div id="previewContainer" class="hidden mt-6 p-4 bg-slate-950/50 rounded-lg border border-slate-800">
                     <div class="flex items-center gap-2 mb-3 text-xs font-bold text-indigo-400 uppercase tracking-widest">
@@ -137,7 +152,7 @@
             </div>
 
             <!-- Step 2: Configuration -->
-            <div id="step2" class="card-clean p-8 opacity-40 grayscale pointer-events-none transition-all duration-300">
+            <div id="step2" class="card-clean p-8 transition-all duration-300">
                 <div class="flex items-center gap-3 mb-6">
                     <span class="w-8 h-8 rounded-lg bg-indigo-600/10 text-indigo-500 flex items-center justify-center font-bold text-sm">2</span>
                     <h2 class="text-lg font-semibold">Teks & Konfigurasi</h2>
@@ -158,7 +173,7 @@
                             <input type="range" id="speedSelector" min="0.5" max="2.0" step="0.1" value="1.1" class="w-full accent-indigo-600">
                         </div>
                         <div class="flex items-end">
-                            <button id="generateBtn" disabled class="btn-solid w-full py-3.5 rounded-xl font-bold flex items-center justify-center gap-2">
+                            <button id="generateBtn" class="btn-solid w-full py-3.5 rounded-xl font-bold flex items-center justify-center gap-2">
                                 <span>Generate Voice</span>
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
@@ -306,12 +321,20 @@
                 const text = elements.textInput.value;
                 if (!text) return;
 
+                if (!currentSpeakerId && !finalWavBlob) {
+                    alert('Silakan rekam suara atau Klik "Mulai Latih Suara Premium" terlebih dahulu.');
+                    return;
+                }
+
                 elements.generateBtn.disabled = true;
                 elements.generateBtn.innerHTML = "Generating...";
 
                 const formData = new FormData();
-                if (currentSpeakerId) formData.append('speaker_id', currentSpeakerId);
-                else formData.append('audio', finalWavBlob, 'ref.wav');
+                if (currentSpeakerId) {
+                    formData.append('speaker_id', currentSpeakerId);
+                } else {
+                    formData.append('audio', finalWavBlob, 'ref.wav');
+                }
                 formData.append('text', text);
                 formData.append('speed', elements.speedSelector.value);
 
@@ -337,6 +360,43 @@
                 } finally {
                     elements.generateBtn.disabled = false;
                     elements.generateBtn.innerHTML = "Generate Voice";
+                }
+            });
+
+            // Start Premium Training
+            document.getElementById('startTrainBtn').addEventListener('click', async () => {
+                const btn = document.getElementById('startTrainBtn');
+                const status = document.getElementById('trainStatus');
+
+                btn.disabled = true;
+                status.classList.remove('hidden');
+
+                try {
+                    const response = await fetch('/api/start-training', {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                            'Accept': 'application/json'
+                        }
+                    });
+
+                    const data = await response.json();
+                    if (data.success) {
+                        alert('🔥 Sukses! RunPod sedang melatih suara Anda menggunakan dataset 30 menit. Silakan cek terminal RunPod Worker Anda.');
+                        // Aktifkan tombol generate jika sebelumnya mati
+                        elements.generateBtn.disabled = false;
+                        elements.generateBtn.classList.remove('opacity-50');
+                        // Set speaker_id ke guest_admin agar sistem tahu menggunakan model premium
+                        currentSpeakerId = 'guest_admin';
+                    } else {
+                        alert('❌ Gagal memicu training: ' + (data.error || 'Unknown error'));
+                    }
+                } catch (err) {
+                    console.error(err);
+                    alert('❌ Terjadi kesalahan koneksi ke backend.');
+                } finally {
+                    btn.disabled = false;
+                    status.classList.add('hidden');
                 }
             });
 

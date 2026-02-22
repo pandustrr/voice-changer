@@ -14,7 +14,10 @@ class RunpodService
         $apiKey = env('RUNPOD_API_KEY');
         $trainingUrl = env('AI_TRAINING_URL', 'http://127.0.0.1:8001/train');
 
-        if (!$apiKey) {
+        // Jika URL adalah localhost/127.0.0.1, kita paksa pakai mode lokal untuk testing
+        $isLocal = str_contains($trainingUrl, '127.0.0.1') || str_contains($trainingUrl, 'localhost');
+
+        if (!$apiKey || $isLocal) {
             // Local Fallback (Ke worker lokal kita di port 8001)
             $response = Http::post($trainingUrl, $params);
 
