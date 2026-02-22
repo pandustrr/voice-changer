@@ -155,15 +155,18 @@ class VoiceChangerController extends Controller
     public function startTraining(Request $request)
     {
         try {
-            Log::info("DEBUG: Memulai StartTraining");
+            Log::info("DEBUG: Mencoba mencari file audio...");
 
-            // VALIDASI: Paksa harus ada file audio yang di-upload!
-            $request->validate([
-                'audio' => 'required|file|mimes:wav,mp3,m4a|max:51200'
-            ]);
+            // CARI FILE: Cek di 'audio', 'file', atau ambil file pertama yang ada
+            $audioFile = $request->file('audio') ?? $request->file('file') ?? collect($request->allFiles())->first();
+
+            if (!$audioFile) {
+                return response()->json([
+                    'error' => 'Gagal: Anda belum memilih file audio di website atau format file tidak didukung.'
+                ], 422);
+            }
 
             $userId = Auth::check() ? Auth::id() : 'guest_admin';
-            $audioFile = $request->file('audio');
 
             // Alur R2
             $tempPath = $audioFile->store('temp_audio', 'public');
