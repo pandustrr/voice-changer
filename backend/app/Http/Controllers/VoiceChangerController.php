@@ -141,16 +141,34 @@ class VoiceChangerController extends Controller
 
     public function startTraining(Request $request)
     {
-        // Dataset path yang tadi kita upload ke R2
-        $datasetPath = "datasets/my_voice/";
+        // 1. Ambil data dari request (Jika ada upload file)
+        $userId = Auth::check() ? Auth::id() : 'guest_admin';
+        $audioFile = $request->file('audio');
+
+        // 2. Jika ada file baru, gunakan alur R2 yang baru
+        if ($audioFile) {
+            $storage = new \App\Services\StorageService();
+            $tempPath = $audioFile->store('temp_audio', 'public');
+            $fullLocalPath = storage_path('app/public/' . $tempPath);
+
+            $cloudPath = "training/raw/" . $userId . "/" . time() . "_" . $audioFile->getClientOriginalName();
+            $storage->uploadToCloud($fullLocalPath, $cloudPath);
+            @unlink($fullLocalPath);
+            $datasetPath = $cloudPath;
+        } else {
+            // Fallback jika tidak ada upload baru
+            $datasetPath = $request->input('audio_path', "datasets/my_voice/suara_target.wav");
+        }
+
         $runpodService = new \App\Services\RunpodService();
 
         try {
             // Memanggil RunPod (Atau Local AI Server jika RunPod API Key kosong)
             $response = $runpodService->train([
-                'user_id' => 'guest_admin',
+                'user_id' => (string)$userId,
                 'audio_path' => $datasetPath,
-                'model_name' => 'premium_voice_' . time()
+                'model_name' => 'premium_voice_' . time(),
+                'epochs' => 100
             ]);
 
             return response()->json([
