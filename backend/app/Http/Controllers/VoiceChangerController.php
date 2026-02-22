@@ -155,9 +155,9 @@ class VoiceChangerController extends Controller
     public function startTraining(Request $request)
     {
         try {
-            Log::info("DEBUG: Mencoba mencari file audio...");
+            Log::info("DEBUG: Memulai StartTraining - Menunggu upload file...");
 
-            // 1. CARI FILE dari request: Cek 'audio', 'file', atau ambil file pertama yang ada
+            // 1. CARI FILE dari request
             $audioFile = $request->file('audio') ?? $request->file('file') ?? collect($request->allFiles())->first();
 
             $datasetPath = null;
@@ -179,18 +179,13 @@ class VoiceChangerController extends Controller
                 $this->storage->uploadToCloud($fullLocalPath, $datasetPath);
                 @unlink($fullLocalPath);
             } else {
-                // Skema B: Tidak ada file di request, cari file terakhir di folder references
-                Log::warning("⚠️ DEBUG: Tidak ada file di request, MENGGUNAKAN FALLBACK (File Terakhir). Pastikan upload file besar sudah selesai.");
-                $allFiles = Storage::disk('public')->files('references');
-                $latestFile = collect($allFiles)->last();
+                // No file found
+                $contentLength = $request->getContentLength();
+                Log::error("❌ ERROR: File tidak ditemukan di request. Content-Length: $contentLength bytes. Cek post_max_size PHP.");
 
-                if ($latestFile) {
-                    $fullLocalPath = storage_path('app/public/' . $latestFile);
-                    $datasetPath = "training/raw/fallback_" . time() . "_" . basename($latestFile);
-
-                    Log::info("DEBUG: Menggunakan file fallback dari storage: $datasetPath (" . basename($latestFile) . ")");
-                    $this->storage->uploadToCloud($fullLocalPath, $datasetPath);
-                }
+                return response()->json([
+                    'error' => 'Gagal: File audio 30 menit (300MB+) Anda tidak terbaca oleh server. Kemungkinan upload terputus atau batas limit PHP (post_max_size) terlalu kecil.'
+                ], 422);
             }
 
             if (!$datasetPath) {
