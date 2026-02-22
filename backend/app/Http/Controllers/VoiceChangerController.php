@@ -157,32 +157,49 @@ class VoiceChangerController extends Controller
         try {
             Log::info("DEBUG: Mencoba mencari file audio...");
 
-            // CARI FILE: Cek di 'audio', 'file', atau ambil file pertama yang ada
+            // 1. CARI FILE dari request: Cek 'audio', 'file', atau ambil file pertama yang ada
             $audioFile = $request->file('audio') ?? $request->file('file') ?? collect($request->allFiles())->first();
 
-            if (!$audioFile) {
+            $datasetPath = null;
+
+            if ($audioFile) {
+                // Skema A: Ada file yang di-upload saat ini
+                $tempPath = $audioFile->store('temp_audio', 'public');
+                $fullLocalPath = storage_path('app/public/' . $tempPath);
+
+                $datasetPath = "training/raw/user_" . time() . "_" . $audioFile->getClientOriginalName();
+                Log::info("DEBUG: Uploading file baru ke R2: $datasetPath");
+
+                $this->storage->uploadToCloud($fullLocalPath, $datasetPath);
+                @unlink($fullLocalPath);
+            } else {
+                // Skema B: Tidak ada file di request, cari file terakhir di folder references
+                Log::info("DEBUG: Tidak ada file di request, mencari file di folder references...");
+                $allFiles = Storage::disk('public')->files('references');
+                $latestFile = collect($allFiles)->last();
+
+                if ($latestFile) {
+                    $fullLocalPath = storage_path('app/public/' . $latestFile);
+                    $datasetPath = "training/raw/fallback_" . time() . "_" . basename($latestFile);
+
+                    Log::info("DEBUG: Menggunakan file fallback dari storage: $datasetPath");
+                    $this->storage->uploadToCloud($fullLocalPath, $datasetPath);
+                }
+            }
+
+            if (!$datasetPath) {
                 return response()->json([
-                    'error' => 'Gagal: Anda belum memilih file audio di website atau format file tidak didukung.'
+                    'error' => 'Gagal: Silakan pilih atau upload file audio terlebih dahulu.'
                 ], 422);
             }
 
             $userId = Auth::check() ? Auth::id() : 'guest_admin';
 
-            // Alur R2
-            $tempPath = $audioFile->store('temp_audio', 'public');
-            $fullLocalPath = storage_path('app/public/' . $tempPath);
-
-            $cloudPath = "training/raw/" . $userId . "/" . time() . "_" . $audioFile->getClientOriginalName();
-            Log::info("DEBUG: Uploading ke R2: $cloudPath");
-
-            // Gunakan $this->storage yang sudah di-inject di constructor
-            $this->storage->uploadToCloud($fullLocalPath, $cloudPath);
-            @unlink($fullLocalPath);
-
-            // Memanggil RunPod
+            // 3. Memanggil RunPod Worker
+            Log::info("🚀 Triggering RunPod training with path: $datasetPath");
             $response = $this->runpod->train([
                 'user_id' => (string)$userId,
-                'audio_path' => $cloudPath, // Sekarang pasti file asli dari R2
+                'audio_path' => $datasetPath,
                 'model_name' => 'premium_voice_' . time(),
                 'epochs' => 100
             ]);
