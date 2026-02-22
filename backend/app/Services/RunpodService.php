@@ -6,42 +6,29 @@ use Illuminate\Support\Facades\Http;
 
 class RunpodService
 {
-    /**
-     * Trigger training task on Runpod
-     */
     public function train(array $params)
     {
         $apiKey = env('RUNPOD_API_KEY');
-        $trainingUrl = env('AI_TRAINING_URL', 'http://127.0.0.1:8001/train');
+        $trainingUrl = env('AI_TRAINING_URL');
 
-        // Jika URL adalah localhost/127.0.0.1, kita paksa pakai mode lokal untuk testing
-        $isLocal = str_contains($trainingUrl, '127.0.0.1') || str_contains($trainingUrl, 'localhost');
+        // Jika URL menggunakan Proxy RunPod, kirim data LANGSUNG (Direct)
+        // Jika URL menggunakan API Runpod Serverless (v1/xxx/run), baru pakai 'input'
+        $isProxy = str_contains($trainingUrl, 'proxy.runpod.net');
 
-        if (!$apiKey || $isLocal) {
-            // Local Fallback (Ke worker lokal kita di port 8001)
-            $response = Http::post($trainingUrl, $params);
-
-            return [
-                'status' => 'success',
-                'mode' => 'local',
-                'response' => $response->json(),
-                'message' => 'Training started on local worker.'
-            ];
+        if ($isProxy) {
+            $response = Http::withHeaders([
+                'Authorization' => "Bearer $apiKey",
+                'Content-Type' => 'application/json',
+            ])->post($trainingUrl, $params); // Tanpa pembungkus 'input'
+        } else {
+            $response = Http::withHeaders([
+                'Authorization' => "Bearer $apiKey",
+                'Content-Type' => 'application/json',
+            ])->post($trainingUrl, [
+                'input' => $params // Khusus Serverless API
+            ]);
         }
 
-        // Request ke Runpod API
-        $response = Http::withHeaders([
-            'Authorization' => "Bearer $apiKey",
-            'Content-Type' => 'application/json',
-        ])->post($trainingUrl, [
-            'input' => $params // Runpod Serverless biasanya membungkus dalam 'input'
-        ]);
-
-        return [
-            'status' => 'success',
-            'mode' => 'runpod',
-            'response' => $response->json(),
-            'message' => 'Training triggered on Runpod Cloud.'
-        ];
+        return $response->json();
     }
 }
