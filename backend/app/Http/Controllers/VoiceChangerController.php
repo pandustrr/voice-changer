@@ -30,14 +30,19 @@ class VoiceChangerController extends Controller
     public function initializeVoice(Request $request)
     {
         $request->validate([
-            'audio' => 'required|file|max:524288',
+            'audio' => 'required|file|max:524288', // 512MB
         ]);
 
         $audio = $request->file('audio');
+
+        // SIMPAN: Agar bisa dipakai buat training nanti (Fallback)
+        $audio->store('references', 'public');
+
         $baseUrl = env('AI_GENERATE_URL', 'http://localhost:5000');
 
         try {
-            $response = Http::timeout(60)->attach(
+            // Ditambah timeout karena file 300MB+ butuh waktu kirim
+            $response = Http::timeout(300)->attach(
                 'audio',
                 file_get_contents($audio->getRealPath()),
                 'ref.wav'
@@ -48,13 +53,14 @@ class VoiceChangerController extends Controller
                 return response()->json([
                     'success' => true,
                     'speaker_id' => $data['speaker_id'],
-                    'message' => 'Profile suara berhasil diekstrak dan disimpan di server AI.'
+                    'message' => 'Profile suara berhasil diekstrak dan disimpan di server.'
                 ]);
             }
 
             return response()->json(['error' => 'Gagal memproses suara: ' . $response->body()], 500);
         } catch (\Exception $e) {
-            return response()->json(['error' => 'Server AI Offline'], 500);
+            Log::error("❌ INITIALIZE ERROR: " . $e->getMessage());
+            return response()->json(['error' => 'Server AI Offline / Timeout'], 500);
         }
     }
 

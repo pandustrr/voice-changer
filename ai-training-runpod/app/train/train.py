@@ -42,6 +42,7 @@ def run_training(dataset_dir, output_dir, epochs=100, batch_size=2):
         "path": dataset_dir,
         "meta_file_train": metadata_path,
         "meta_file_val": metadata_path, 
+        "ignored_speakers": [],
         "formatter": "ljspeech",
         "language": "id"
     }
