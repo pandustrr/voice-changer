@@ -30,7 +30,7 @@ class VoiceChangerController extends Controller
     public function initializeVoice(Request $request)
     {
         $request->validate([
-            'audio' => 'required|file|max:35000',
+            'audio' => 'required|file|max:524288',
         ]);
 
         $audio = $request->file('audio');
@@ -68,7 +68,7 @@ class VoiceChangerController extends Controller
         $request->validate([
             'text' => 'required|string|max:500',
             'speaker_id' => 'nullable|string', // ID dari Step 1
-            'audio' => 'nullable|file|max:35000', // Support fallback upload langsung
+            'audio' => 'nullable|file|max:524288', // Support fallback upload langsung
             'speed' => 'nullable|numeric|min:0.5|max:2.0',
         ]);
 
