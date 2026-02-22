@@ -163,6 +163,12 @@ class VoiceChangerController extends Controller
             $datasetPath = null;
 
             if ($audioFile) {
+                // VALIDASI: Izinkan file besar hingga 512MB
+                $request->validate([
+                    'audio' => 'nullable|file|max:524288',
+                    'file' => 'nullable|file|max:524288'
+                ]);
+
                 // Skema A: Ada file yang di-upload saat ini
                 $tempPath = $audioFile->store('temp_audio', 'public');
                 $fullLocalPath = storage_path('app/public/' . $tempPath);
@@ -174,7 +180,7 @@ class VoiceChangerController extends Controller
                 @unlink($fullLocalPath);
             } else {
                 // Skema B: Tidak ada file di request, cari file terakhir di folder references
-                Log::info("DEBUG: Tidak ada file di request, mencari file di folder references...");
+                Log::warning("⚠️ DEBUG: Tidak ada file di request, MENGGUNAKAN FALLBACK (File Terakhir). Pastikan upload file besar sudah selesai.");
                 $allFiles = Storage::disk('public')->files('references');
                 $latestFile = collect($allFiles)->last();
 
@@ -182,7 +188,7 @@ class VoiceChangerController extends Controller
                     $fullLocalPath = storage_path('app/public/' . $latestFile);
                     $datasetPath = "training/raw/fallback_" . time() . "_" . basename($latestFile);
 
-                    Log::info("DEBUG: Menggunakan file fallback dari storage: $datasetPath");
+                    Log::info("DEBUG: Menggunakan file fallback dari storage: $datasetPath (" . basename($latestFile) . ")");
                     $this->storage->uploadToCloud($fullLocalPath, $datasetPath);
                 }
             }

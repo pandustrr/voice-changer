@@ -41,6 +41,7 @@ def run_training(dataset_dir, output_dir, epochs=100, batch_size=2):
         "dataset_name": "custom_dataset",
         "path": dataset_dir,
         "meta_file_train": metadata_path,
+        "meta_file_val": metadata_path, 
         "formatter": "ljspeech",
         "language": "id"
     }
