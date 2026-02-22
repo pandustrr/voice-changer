@@ -6,9 +6,13 @@ import threading
 from fastapi import FastAPI, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 from typing import Optional
+from dotenv import load_dotenv
 
 # Menambahkan directory parent dari script ini (ai-training-runpod) ke path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+# Load environment variables
+load_dotenv()
 
 from services.s3_manager import S3Manager
 from services.local_storage_manager import LocalStorageManager
