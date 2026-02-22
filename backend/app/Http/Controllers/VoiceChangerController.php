@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 
 class VoiceChangerController extends Controller
 {
@@ -141,32 +142,34 @@ class VoiceChangerController extends Controller
 
     public function startTraining(Request $request)
     {
-        // 1. Ambil data dari request (Jika ada upload file)
+        Log::info("DEBUG: Memulai StartTraining");
+
+        // VALIDASI: Paksa harus ada file audio yang di-upload!
+        $request->validate([
+            'audio' => 'required|file|mimes:wav,mp3,m4a|max:51200'
+        ]);
+
         $userId = Auth::check() ? Auth::id() : 'guest_admin';
         $audioFile = $request->file('audio');
 
-        // 2. Jika ada file baru, gunakan alur R2 yang baru
-        if ($audioFile) {
-            $storage = new \App\Services\StorageService();
-            $tempPath = $audioFile->store('temp_audio', 'public');
-            $fullLocalPath = storage_path('app/public/' . $tempPath);
+        // Alur R2
+        $storage = new \App\Services\StorageService();
+        $tempPath = $audioFile->store('temp_audio', 'public');
+        $fullLocalPath = storage_path('app/public/' . $tempPath);
 
-            $cloudPath = "training/raw/" . $userId . "/" . time() . "_" . $audioFile->getClientOriginalName();
-            $storage->uploadToCloud($fullLocalPath, $cloudPath);
-            @unlink($fullLocalPath);
-            $datasetPath = $cloudPath;
-        } else {
-            // Fallback jika tidak ada upload baru
-            $datasetPath = $request->input('audio_path', "datasets/my_voice/suara_target.wav");
-        }
+        $cloudPath = "training/raw/" . $userId . "/" . time() . "_" . $audioFile->getClientOriginalName();
+        Log::info("DEBUG: Uploading ke R2: $cloudPath");
+
+        $storage->uploadToCloud($fullLocalPath, $cloudPath);
+        @unlink($fullLocalPath);
 
         $runpodService = new \App\Services\RunpodService();
 
         try {
-            // Memanggil RunPod (Atau Local AI Server jika RunPod API Key kosong)
+            // Memanggil RunPod
             $response = $runpodService->train([
                 'user_id' => (string)$userId,
-                'audio_path' => $datasetPath,
+                'audio_path' => $cloudPath, // Sekarang pasti file asli dari R2
                 'model_name' => 'premium_voice_' . time(),
                 'epochs' => 100
             ]);
