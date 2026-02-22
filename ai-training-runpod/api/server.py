@@ -3,6 +3,7 @@ import sys
 import uuid
 import shutil
 import threading
+import torch
 from fastapi import FastAPI, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 from typing import Optional
