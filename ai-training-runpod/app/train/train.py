@@ -3,10 +3,11 @@ import torch
 import requests
 from TTS.tts.configs.xtts_config import XttsConfig
 from TTS.tts.models.xtts import XttsAudioConfig, XttsArgs
+from TTS.tts.configs.shared_configs import BaseDatasetConfig
 
 # Fix untuk PyTorch 2.6+ security restriction
 if hasattr(torch.serialization, 'add_safe_globals'):
-    torch.serialization.add_safe_globals([XttsConfig, XttsAudioConfig, XttsArgs])
+    torch.serialization.add_safe_globals([XttsConfig, XttsAudioConfig, XttsArgs, BaseDatasetConfig])
 
 from TTS.tts.models.xtts import Xtts
 try:
