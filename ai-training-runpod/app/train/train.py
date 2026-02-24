@@ -14,19 +14,29 @@ from TTS.tts.datasets import load_tts_samples
 def run_training(dataset_dir, output_dir, epochs=100, batch_size=2):
     """
     Fungsi utama untuk menjalankan fine-tuning XTTS v2.
-    dataset_dir: Folder yang berisi wavs/ dan metadata.csv
-    output_dir: Folder hasil training
     """
-    
     config_path = os.path.join(dataset_dir, "config.json")
+    model_path = os.path.join(dataset_dir, "model.pth")
+    vocab_path = os.path.join(dataset_dir, "vocab.json")
+    speaker_path = os.path.join(dataset_dir, "speakers_xtts.pth")
     metadata_path = os.path.join(dataset_dir, "metadata.csv")
     
-    # 1. DOWNLOAD BASE CONFIG IF NOT EXISTS
-    if not os.path.exists(config_path):
-        print("📥 Download base config from HuggingFace...")
-        r = requests.get("https://huggingface.co/coqui/XTTS-v2/raw/main/config.json")
-        with open(config_path, "wb") as f:
-            f.write(r.content)
+    # 1. DOWNLOAD BASE MODEL FILES (Penting untuk Fine-tuning)
+    files_to_download = {
+        "config.json": "https://huggingface.co/coqui/XTTS-v2/raw/main/config.json",
+        "model.pth": "https://huggingface.co/coqui/XTTS-v2/resolve/main/model.pth",
+        "vocab.json": "https://huggingface.co/coqui/XTTS-v2/resolve/main/vocab.json",
+        "speakers_xtts.pth": "https://huggingface.co/coqui/XTTS-v2/resolve/main/speakers_xtts.pth"
+    }
+
+    for filename, url in files_to_download.get_items():
+        path = os.path.join(dataset_dir, filename)
+        if not os.path.exists(path):
+            print(f"📥 Downloading {filename}...")
+            r = requests.get(url, stream=True)
+            with open(path, "wb") as f:
+                for chunk in r.iter_content(chunk_size=8192):
+                    f.write(chunk)
 
     # 2. XTTS CONFIGURATION
     cfg = XttsConfig()
@@ -36,8 +46,7 @@ def run_training(dataset_dir, output_dir, epochs=100, batch_size=2):
     cfg.batch_size = batch_size
     cfg.use_d_vector_file = False
     cfg.use_speaker_embedding = True
-    cfg.use_phonemes = False
-    cfg.ignored_speakers = []
+    cfg.use_phonemes = False # Matikan phonemes untuk hindari error espeak
     
     d_cfg = BaseDatasetConfig(
         dataset_name="custom_dataset",
@@ -55,23 +64,23 @@ def run_training(dataset_dir, output_dir, epochs=100, batch_size=2):
         samples = samples[0]
     print(f"✅ Data Terbaca: {len(samples)} file")
 
-    # 4. INITIALIZE MODEL
+    # 4. INITIALIZE MODEL & LOAD CHECKPOINT
+    print("🧠 Initializing XTTS v2 Model...")
     model = Xtts.init_from_config(cfg)
-    
-    # Patch tokenizer (untuk hindari error print_logs/use_phonemes)
-    model.tokenizer.use_phonemes = False
-    if not hasattr(model.tokenizer, "print_logs"):
-        model.tokenizer.print_logs = lambda x: None
-        
+    model.load_checkpoint(cfg, checkpoint_path=model_path, vocab_path=vocab_path, speaker_file_path=speaker_path)
     model.to("cuda")
-    
-    # Patch criterion (untuk versi trainer tertentu)
-    if not hasattr(model, "get_criterion"):
-        model.get_criterion = lambda: torch.nn.L1Loss()
 
-    # 5. START TRAINING
-    args = TrainerArgs()
-    print(f"🚀 Memulai proses training selama {epochs} Epoch...")
+    # 5. CONFIGURE TRAINER
+    args = TrainerArgs(
+        restore_path=None,
+        project_name="xtts_finetune",
+        dashboard_logger=None,
+        stdout_logger=True,
+        save_all_best=True,
+        save_step=500
+    )
+    
+    print(f"🚀 Memulai proses training selama {epochs} Epoch (RTX 4090 Mode)...")
     
     trainer = Trainer(
         args, 
@@ -80,7 +89,12 @@ def run_training(dataset_dir, output_dir, epochs=100, batch_size=2):
         model=model, 
         train_samples=samples
     )
-    trainer.fit()
+    
+    try:
+        trainer.fit()
+    except Exception as e:
+        print(f"❌ ERROR SAAT FIT: {str(e)}")
+        raise e
     
     return os.path.join(output_dir, "best_model.pth")
 
