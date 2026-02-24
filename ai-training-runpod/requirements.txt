@@ -2,12 +2,12 @@ fastapi
 uvicorn
 pydub
 TTS
-torch
 SpeechRecognition
 pandas
 librosa
 soundfile
 boto3
 python-dotenv
-transformers
+transformers==4.33.1
 tokenizers
+accelerate
