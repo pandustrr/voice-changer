@@ -58,6 +58,14 @@ class RunpodService
                   volumeMountPath: "/workspace",
                   ports: "8888/http",
                   name: "' . $name . '",
+                  env: [
+                    { key: "AWS_ACCESS_KEY_ID", value: "' . env('AWS_ACCESS_KEY_ID') . '" },
+                    { key: "AWS_SECRET_ACCESS_KEY", value: "' . env('AWS_SECRET_ACCESS_KEY') . '" },
+                    { key: "AWS_DEFAULT_REGION", value: "' . env('AWS_DEFAULT_REGION', 'auto') . '" },
+                    { key: "AWS_BUCKET", value: "' . env('AWS_BUCKET') . '" },
+                    { key: "AWS_ENDPOINT", value: "' . env('AWS_ENDPOINT') . '" },
+                    { key: "AWS_URL", value: "' . env('AWS_URL') . '" }
+                  ],
                   dockerArgs: "bash -c \'apt-get update && apt-get install -y ffmpeg && if [ ! -d \"/workspace/voice-changer\" ]; then cd /workspace && git clone -b branch-pandu https://github.com/pandustrr/voice-changer; fi && cd /workspace/voice-changer/ai-training-runpod && pip install --ignore-installed -r requirements.txt && python3 -m uvicorn api.server:app --host 0.0.0.0 --port 8888\'"
                 }
               ) {
