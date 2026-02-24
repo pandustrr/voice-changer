@@ -80,9 +80,6 @@ def run_training(dataset_dir, output_dir, epochs=100, batch_size=2):
     # 5. CONFIGURE TRAINER
     args = TrainerArgs(
         restore_path=None,
-        project_name="xtts_finetune",
-        dashboard_logger=None,
-        stdout_logger=True,
         save_all_best=True,
         save_step=500
     )
