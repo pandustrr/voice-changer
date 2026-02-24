@@ -2,6 +2,11 @@ import os
 import torch
 import requests
 from TTS.tts.configs.xtts_config import XttsConfig
+
+# Fix untuk PyTorch 2.6+ security restriction
+if hasattr(torch.serialization, 'add_safe_globals'):
+    torch.serialization.add_safe_globals([XttsConfig])
+
 from TTS.tts.models.xtts import Xtts
 try:
     from trainer import Trainer, TrainerArgs
