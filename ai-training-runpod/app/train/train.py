@@ -36,6 +36,7 @@ def run_training(dataset_dir, output_dir, epochs=100, batch_size=2):
     cfg.use_d_vector_file = False
     cfg.use_speaker_embedding = True
     cfg.use_phonemes = False
+    cfg.ignored_speakers = []
     
     d_cfg = {
         "dataset_name": "custom_dataset",

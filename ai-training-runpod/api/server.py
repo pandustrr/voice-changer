@@ -33,10 +33,29 @@ class TrainingRequest(BaseModel):
     model_name: Optional[str] = "custom_voice"
     epochs: Optional[int] = 100
 
+# Progress tracking
+training_progress = {
+    "status": "idle",
+    "current_step": "none",
+    "progress_percent": 0,
+    "current_epoch": 0,
+    "total_epochs": 0,
+    "message": "Waiting for command..."
+}
+
 def run_training_pipeline(request: TrainingRequest):
     """Fungsi UTAMA: Pipeline Otomatis"""
+    global training_progress
     training_id = str(uuid.uuid4())[:8]
-    # Gunakan path absolut untuk keamanan di RunPod
+    
+    training_progress.update({
+        "status": "running",
+        "current_step": "initializing",
+        "progress_percent": 5,
+        "total_epochs": request.epochs,
+        "message": f"Initializing session {training_id}"
+    })
+
     base_work_dir = f"/workspace/voice-changer/ai-training-runpod/temp_training_{training_id}"
     raw_audio_dir = os.path.join(base_work_dir, "raw_audio")
     wavs_dir = os.path.join(base_work_dir, "wavs")
@@ -50,50 +69,76 @@ def run_training_pipeline(request: TrainingRequest):
     
     try:
         # 1. DOWNLOAD RAW AUDIO DARI R2
+        training_progress.update({
+            "current_step": "downloading",
+            "progress_percent": 15,
+            "message": "Downloading dataset from Cloud..."
+        })
+        
         is_s3 = os.getenv("AWS_ACCESS_KEY_ID") is not None
         local_raw_file = os.path.join(raw_audio_dir, os.path.basename(request.audio_path))
         
         if is_s3:
-            print(f"📥 Downloading raw audio: {request.audio_path}")
             s3.s3.download_file(s3.bucket, request.audio_path, local_raw_file)
         else:
-            print(f"📂 Menggunakan file lokal: {request.audio_path}")
-            # Simulasi copy jika lokal
             shutil.copy(request.audio_path, local_raw_file)
 
         # 2. PREPROCESSING: SPLIT AUDIO
-        print("✂️ [PIPELINE] Memotong audio panjang menjadi segmen...")
-        # Kita perlu pindah directory sebentar karena script split_audio pakai path relatif
+        training_progress.update({
+            "current_step": "preprocessing",
+            "progress_percent": 30,
+            "message": "Splitting audio into segments..."
+        })
         old_cwd = os.getcwd()
         os.chdir(base_work_dir)
         split_long_audio() 
         
         # 3. PREPROCESSING: TRANSCRIBE
-        print("🎤 [PIPELINE] Melakukan transkripsi otomatis (Google ID)...")
+        training_progress.update({
+            "progress_percent": 45,
+            "message": "Transcribing audio segments..."
+        })
         transcribe_with_google()
         os.chdir(old_cwd)
 
         # 4. START TRAINING
-        print("🚀 [PIPELINE] Menjalankan Mesin Training XTTS v2...")
+        training_progress.update({
+            "current_step": "training",
+            "progress_percent": 50,
+            "message": "Starting XTTS v2 Training Engine..."
+        })
+        
+        # Note: In a real scenario, you'd want to hook into the run_training loop to update current_epoch
+        # For now, we simulate the start
         best_model_path = run_training(
             dataset_dir=base_work_dir,
             output_dir=output_dir,
             epochs=request.epochs,
-            batch_size=2 # RTX 4090 amannya pakai 2
+            batch_size=2 
         )
 
         # 5. UPLOAD HASIL KE R2
+        training_progress.update({
+            "current_step": "uploading",
+            "progress_percent": 90,
+            "message": "Uploading trained model to Cloud..."
+        })
         remote_model_dir = f"models/{request.user_id}/{request.model_name}_{training_id}"
         if is_s3:
             s3.upload_model(output_dir, remote_model_dir)
-            print(f"✅ [PIPELINE] Training Selesai! Model di-upload ke: {remote_model_dir}")
-        else:
-            print(f"✅ [PIPELINE] Training Selesai! Hasil di folder: {output_dir}")
 
-        # 6. CLEANUP (Opsional)
-        # shutil.rmtree(base_work_dir)
+        training_progress.update({
+            "status": "completed",
+            "current_step": "done",
+            "progress_percent": 100,
+            "message": "Training finished successfully!"
+        })
 
     except Exception as e:
+        training_progress.update({
+            "status": "error",
+            "message": f"Pipeline Error: {str(e)}"
+        })
         print(f"❌ [PIPELINE] ERROR FATAL: {str(e)}")
 
 @app.post("/train")
@@ -103,9 +148,13 @@ async def trigger_training(request: TrainingRequest, background_tasks: Backgroun
     return {
         "status": "processing",
         "message": "Pipeline training dimulai di background.",
-        "user_id": request.user_id,
-        "mode": "GPU RTX 4090 Ready"
+        "user_id": request.user_id
     }
+
+@app.get("/status")
+async def get_status():
+    """Endpoint Monitoring Real-time"""
+    return training_progress
 
 @app.get("/health")
 async def health():
@@ -113,5 +162,4 @@ async def health():
 
 if __name__ == "__main__":
     import uvicorn
-    import torch
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+    uvicorn.run(app, host="0.0.0.0", port=8888)

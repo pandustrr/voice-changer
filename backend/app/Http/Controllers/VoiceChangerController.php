@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Cache;
 
 use App\Services\RunpodService;
 use App\Services\StorageService;
@@ -29,23 +30,25 @@ class VoiceChangerController extends Controller
      */
     public function initializeVoice(Request $request)
     {
+        ini_set('memory_limit', '1024M');
         $request->validate([
             'audio' => 'required|file|max:524288', // 512MB
         ]);
 
         $audio = $request->file('audio');
 
-        // SIMPAN: Agar bisa dipakai buat training nanti (Fallback)
-        $audio->store('references', 'public');
+        // SIMPAN: Agar bisa dipakai buat training nanti
+        $filename = $audio->store('references', 'public');
+        Log::info("✅ STEP 1: File profile disimpan: $filename (" . round($audio->getSize() / 1024 / 1024, 2) . " MB)");
 
         $baseUrl = env('AI_GENERATE_URL', 'http://localhost:5000');
 
         try {
-            // Ditambah timeout karena file 300MB+ butuh waktu kirim
-            $response = Http::timeout(300)->attach(
+            // Streaming agar tidak crash saat file 300MB+
+            $response = Http::timeout(600)->attach(
                 'audio',
-                file_get_contents($audio->getRealPath()),
-                'ref.wav'
+                fopen($audio->getRealPath(), 'r'),
+                $audio->getClientOriginalName()
             )->post("{$baseUrl}/extract_speaker");
 
             if ($response->successful()) {
@@ -110,10 +113,11 @@ class VoiceChangerController extends Controller
             $requestChain = Http::timeout(300);
 
             if ($request->hasFile('audio')) {
+                // Streaming upload
                 $requestChain->attach(
                     'audio',
-                    file_get_contents($request->file('audio')->getRealPath()),
-                    'ref.wav'
+                    fopen($request->file('audio')->getRealPath(), 'r'),
+                    $request->file('audio')->getClientOriginalName()
                 );
             }
 
@@ -161,82 +165,114 @@ class VoiceChangerController extends Controller
     public function startTraining(Request $request)
     {
         try {
-            Log::info("DEBUG: Memulai StartTraining - Menunggu upload file...");
+            Log::info("🚀 [ON-DEMAND] Memulai Pipeline Training...");
 
-            // 1. CARI FILE dari request
-            $audioFile = $request->file('audio') ?? $request->file('file') ?? collect($request->allFiles())->first();
-
-            $datasetPath = null;
+            // 1. CARI & VALIDASI FILE
+            $audioFile = $request->file('audio') ?? $request->file('file');
+            $localPath = null;
+            $filename = null;
 
             if ($audioFile) {
-                // VALIDASI: Izinkan file besar hingga 512MB
-                $request->validate([
-                    'audio' => 'nullable|file|max:524288',
-                    'file' => 'nullable|file|max:524288'
-                ]);
-
-                // Skema A: Ada file yang di-upload saat ini
-                $tempPath = $audioFile->store('temp_audio', 'public');
-                $fullLocalPath = storage_path('app/public/' . $tempPath);
-
-                $datasetPath = "training/raw/user_" . time() . "_" . $audioFile->getClientOriginalName();
-                Log::info("DEBUG: Uploading file baru ke R2: $datasetPath");
-
-                $this->storage->uploadToCloud($fullLocalPath, $datasetPath);
-                @unlink($fullLocalPath);
+                // Scenario A: User upload file baru
+                $filename = 'upload_' . time() . '_' . $audioFile->getClientOriginalName();
+                $tempPath = $audioFile->storeAs('references', $filename, 'public');
+                $localPath = storage_path('app/public/' . $tempPath);
+                Log::info("📁 Menggunakan file upload baru: $filename");
             } else {
-                // Skema B: Tidak ada file di request, cari file TERBESAR di folder references
-                Log::info("DEBUG: Tidak ada file di request. Mencari file TERBESAR di storage references...");
+                // Scenario B: Gunakan default suara-30menit.wav
+                $filename = 'suara-30menit.wav';
+                $localPath = storage_path('app/public/references/' . $filename);
 
-                $allFiles = Storage::disk('public')->files('references');
-
-                // Urutkan berdasarkan ukuran (paling besar di atas)
-                $largestFile = collect($allFiles)->sortByDesc(function ($file) {
-                    return Storage::disk('public')->size($file);
-                })->first();
-
-                if ($largestFile) {
-                    $fullLocalPath = storage_path('app/public/' . $largestFile);
-                    $fileSizeMB = round(Storage::disk('public')->size($largestFile) / 1024 / 1024, 2);
-                    $datasetPath = "training/raw/auto_" . time() . "_" . basename($largestFile);
-
-                    Log::info("✅ Ditemukan file besar di storage: " . basename($largestFile) . " ($fileSizeMB MB)");
-                    $this->storage->uploadToCloud($fullLocalPath, $datasetPath);
-                } else {
-                    $contentLength = $request->getContentLength();
-                    Log::error("❌ ERROR: File tidak ditemukan. Content-Length: $contentLength bytes.");
-                    return response()->json([
-                        'error' => 'Gagal: File audio 30 menit tidak ditemukan. Silakan upload ulang di kotak atas.'
-                    ], 422);
+                if (!file_exists($localPath)) {
+                    return response()->json(['error' => "File default $filename tidak ditemukan. Silakan upload file audio."], 422);
                 }
+                Log::info("📁 Menggunakan file default: $filename");
             }
 
-            if (!$datasetPath) {
-                return response()->json([
-                    'error' => 'Gagal: Silakan pilih atau upload file audio terlebih dahulu.'
-                ], 422);
+            // 2. UPLOAD KE CLOUDFLARE R2
+            $cloudPath = "training/raw/" . $filename;
+            Log::info("☁️ [STEP 1] Mengunggah ke R2: $cloudPath");
+            $this->storage->uploadToCloud($localPath, $cloudPath);
+
+            // 3. SEWA GPU RTX 4090 (On-Demand)
+            Log::info("🎮 [STEP 2] Memerintah RunPod untuk menyewa RTX 4090...");
+            $podResponse = $this->runpod->createPod('training_' . time());
+
+            if (!isset($podResponse['id'])) {
+                return response()->json(['error' => 'Gagal menyewa GPU: ' . json_encode($podResponse)], 500);
             }
 
-            $userId = Auth::check() ? Auth::id() : 'guest_admin';
-
-            // 3. Memanggil RunPod Worker
-            Log::info("🚀 Triggering RunPod training with path: $datasetPath");
-            $response = $this->runpod->train([
-                'user_id' => (string)$userId,
-                'audio_path' => $datasetPath,
-                'model_name' => 'premium_voice_' . time(),
+            // 4. SIMPAN METADATA UNTUK AUTO-TRIGGER
+            Cache::put("pod_training_{$podResponse['id']}", [
+                'audio_path' => $cloudPath,
+                'user_id' => 'guest_admin',
                 'epochs' => 100
-            ]);
+            ], now()->addHour());
 
             return response()->json([
                 'success' => true,
-                'message' => 'Training Premium berhasil dipicu!',
-                'data' => $response
+                'message' => 'Pipeline Berhasil Dimulai!',
+                'pod_id' => $podResponse['id'],
+                'file_used' => $filename,
+                'instruction' => 'GPU sedang disiapkan. Proses training akan dimulai otomatis setelah Pod online.'
             ]);
         } catch (\Exception $e) {
             Log::error("❌ ERROR TRAINING: " . $e->getMessage());
             return response()->json(['error' => $e->getMessage()], 500);
         }
+    }
+
+    public function listPods()
+    {
+        $pods = $this->runpod->listPods();
+        return response()->json($pods);
+    }
+
+    public function trainingStatus(Request $request)
+    {
+        $podId = $request->get('pod_id');
+        if (!$podId) {
+            return response()->json(['error' => 'Missing pod_id'], 422);
+        }
+
+        $status = $this->runpod->getPodStatus($podId);
+
+        // AUTO-TRIGGER: Jika pod sudah online tapi masih IDLE, suruh mulai training
+        if (($status['status'] ?? '') === 'idle') {
+            $data = Cache::get("pod_training_{$podId}");
+            if ($data) {
+                Log::info("🤖 [AUTO-TRIGGER] Pod $podId online. Memulai training...");
+                $this->runpod->train([
+                    'user_id' => $data['user_id'],
+                    'audio_path' => $data['audio_path'],
+                    'epochs' => $data['epochs'],
+                    'model_name' => 'premium_voice'
+                ], $podId); // Pass podId to use dynamic URL
+
+                // Beri respon 'starting' agar UI tahu ini sedang diproses
+                $status['status'] = 'running';
+                $status['message'] = 'Memulai mesin training...';
+                $status['progress_percent'] = 5;
+            }
+        }
+
+        return response()->json($status);
+    }
+
+    public function terminatePod(Request $request)
+    {
+        $podId = $request->get('pod_id');
+        if (!$podId) {
+            return response()->json(['error' => 'Missing pod_id'], 422);
+        }
+
+        $response = $this->runpod->deletePod($podId);
+        return response()->json(['success' => true, 'response' => $response]);
+    }
+
+    public function getBalance()
+    {
+        return response()->json($this->runpod->getBalance());
     }
 
     public function engineStatus()
