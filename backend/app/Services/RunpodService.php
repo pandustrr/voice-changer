@@ -58,7 +58,7 @@ class RunpodService
                   volumeMountPath: "/workspace",
                   ports: "8888/http",
                   name: "' . $name . '",
-                  dockerArgs: "bash -c \'if [ ! -d \"/workspace/voice-changer\" ]; then cd /workspace && git clone https://github.com/pandustrr/voice-changer; fi && cd /workspace/voice-changer/ai-training-runpod && pip install --ignore-installed -r requirements.txt && python3 api/server.py\'"
+                  dockerArgs: "bash -c \'if [ ! -d \"/workspace/voice-changer\" ]; then cd /workspace && git clone https://github.com/pandustrr/voice-changer; fi && cd /workspace/voice-changer/ai-training-runpod && pip install --ignore-installed -r requirements.txt && python3 -m uvicorn api.server:app --host 0.0.0.0 --port 8888\'"
                 }
               ) {
                 id
