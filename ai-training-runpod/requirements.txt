@@ -9,3 +9,5 @@ librosa
 soundfile
 boto3
 python-dotenv
+transformers
+tokenizers
