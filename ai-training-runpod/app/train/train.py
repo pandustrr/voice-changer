@@ -8,6 +8,7 @@ try:
 except ImportError:
     os.system("pip install trainer")
     from trainer import Trainer, TrainerArgs
+from TTS.tts.configs.shared_configs import BaseDatasetConfig
 from TTS.tts.datasets import load_tts_samples
 
 def run_training(dataset_dir, output_dir, epochs=100, batch_size=2):
@@ -38,15 +39,14 @@ def run_training(dataset_dir, output_dir, epochs=100, batch_size=2):
     cfg.use_phonemes = False
     cfg.ignored_speakers = []
     
-    d_cfg = {
-        "dataset_name": "custom_dataset",
-        "path": dataset_dir,
-        "meta_file_train": metadata_path,
-        "meta_file_val": metadata_path, 
-        "ignored_speakers": [],
-        "formatter": "ljspeech",
-        "language": "id"
-    }
+    d_cfg = BaseDatasetConfig(
+        dataset_name="custom_dataset",
+        meta_file_train=metadata_path,
+        meta_file_val=metadata_path,
+        path=dataset_dir,
+        formatter="ljspeech",
+        language="id"
+    )
     cfg.dataset_config = [d_cfg]
 
     # 3. LOAD SAMPLES
