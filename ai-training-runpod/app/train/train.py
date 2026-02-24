@@ -29,7 +29,7 @@ def run_training(dataset_dir, output_dir, epochs=100, batch_size=2):
         "speakers_xtts.pth": "https://huggingface.co/coqui/XTTS-v2/resolve/main/speakers_xtts.pth"
     }
 
-    for filename, url in files_to_download.get_items():
+    for filename, url in files_to_download.items():
         path = os.path.join(dataset_dir, filename)
         if not os.path.exists(path):
             print(f"📥 Downloading {filename}...")
