@@ -55,9 +55,10 @@ class RunpodService
                   imageName: "runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04",
                   containerDiskInGb: 30,
                   volumeInGb: 100,
+                  volumeMountPath: "/workspace",
                   ports: "8888/http",
                   name: "' . $name . '",
-                  dockerArgs: "bash -c \'if [ ! -d \"/workspace/voice-changer\" ]; then cd /workspace && git clone https://github.com/pandustrr/voice-changer; fi && cd /workspace/voice-changer/ai-training-runpod && pip install -r requirements.txt && python3 api/server.py\'"
+                  dockerArgs: "bash -c \'if [ ! -d \"/workspace/voice-changer\" ]; then cd /workspace && git clone https://github.com/pandustrr/voice-changer; fi && cd /workspace/voice-changer/ai-training-runpod && pip install --ignore-installed -r requirements.txt && python3 api/server.py\'"
                 }
               ) {
                 id
