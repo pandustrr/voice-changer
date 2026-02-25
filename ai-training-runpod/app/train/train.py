@@ -58,11 +58,18 @@ def run_training(dataset_dir, output_dir, epochs=100, batch_size=2):
     cfg.use_speaker_embedding = True
     if hasattr(cfg, "model_args"):
         setattr(cfg.model_args, "use_speaker_embedding", True)
-        # Compatibility Patch: Some XTTS versions expect these attributes
-        if not hasattr(cfg.model_args, "use_d_vector_file"):
-            setattr(cfg.model_args, "use_d_vector_file", False)
-        if not hasattr(cfg.model_args, "use_gpt_eval"):
-            setattr(cfg.model_args, "use_gpt_eval", False)
+        # Compatibility Patch: Some XTTS versions expect these attributes in model_args (XttsArgs)
+        patch_vars = {
+            "use_d_vector_file": False,
+            "use_gpt_eval": False,
+            "use_language_embedding": True,
+            "use_phonemes": False,
+            "use_conditioning_latents": True
+        }
+        for var, val in patch_vars.items():
+            if not hasattr(cfg.model_args, var):
+                setattr(cfg.model_args, var, val)
+                print(f"🔧 Patched model_args.{var} = {val}")
     
     cfg.use_d_vector_file = False
     cfg.use_phonemes = False
