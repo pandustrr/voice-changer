@@ -81,6 +81,29 @@ def run_training(dataset_dir, output_dir, epochs=100, batch_size=2):
         "Teknologi kecerdasan buatan sekarang benar-benar luar biasa."
     ]
     
+    # 2.5 AUTO-FIX METADATA (Hapus .wav di kolom index jika ada)
+    if os.path.exists(metadata_path):
+        print("🛠️ Checking metadata format...")
+        with open(metadata_path, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+        
+        fixed_lines = []
+        needs_fix = False
+        for line in lines:
+            parts = line.strip().split("|")
+            if len(parts) >= 1 and parts[0].endswith(".wav"):
+                parts[0] = os.path.splitext(parts[0])[0]
+                fixed_lines.append("|".join(parts))
+                needs_fix = True
+            else:
+                fixed_lines.append(line.strip())
+        
+        if needs_fix:
+            print("🔧 Fixing metadata: Removing .wav from audio IDs...")
+            with open(metadata_path, "w", encoding="utf-8") as f:
+                for line in fixed_lines:
+                    f.write(line + "\n")
+
     d_cfg = BaseDatasetConfig(
         dataset_name="custom_dataset",
         meta_file_train=metadata_path,
@@ -125,7 +148,7 @@ def run_training(dataset_dir, output_dir, epochs=100, batch_size=2):
     # 5. CONFIGURE TRAINER
     args = TrainerArgs()
     
-    print(f"🚀 Memulai proses training {epochs} Epoch (RTX 4090 - Production Mode)...")
+    print(f"🚀 Memulai proses training {epochs} Epoch (Production Mode)...")
     
     trainer = Trainer(
         args, 
