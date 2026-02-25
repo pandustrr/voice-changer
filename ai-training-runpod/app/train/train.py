@@ -130,8 +130,10 @@ def run_training(dataset_dir, output_dir, epochs=100, batch_size=2):
     # Ensure AudioProcessor is initialized (Fixed for 'NoneType has no attribute load_wav')
     from TTS.utils.audio import AudioProcessor
     if not hasattr(model, "ap") or model.ap is None:
-        print("🔧 Initializing AudioProcessor...")
-        model.ap = AudioProcessor(**cfg.audio)
+        print("🔧 Initializing AudioProcessor (Robust Mode)...")
+        # Gunakan 22050 sebagai fallback jika config bermasalah
+        sr = getattr(cfg.audio, 'sample_rate', 22050) or 22050
+        model.ap = AudioProcessor(sample_rate=sr, do_trim_silence=True)
 
     # -- PATCH UNTUK KOMPATIBILITAS --
     if not hasattr(model, "get_criterion"):
