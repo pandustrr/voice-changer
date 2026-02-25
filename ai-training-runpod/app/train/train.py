@@ -160,6 +160,11 @@ def run_training(dataset_dir, output_dir, epochs=100, batch_size=2):
     )
     model.to("cuda")
 
+    # Patch: get_criterion — diperlukan Trainer tapi tidak ada di Xtts versi ini
+    if not hasattr(model, "get_criterion"):
+        print("🔧 Patching model.get_criterion...")
+        model.get_criterion = lambda: torch.nn.L1Loss()
+
     # Patch tokenizer jika versi baru tidak punya text_to_ids
     if hasattr(model, "tokenizer") and not hasattr(model.tokenizer, "text_to_ids"):
         print("🔧 Patching tokenizer.text_to_ids (lang=en)...")
