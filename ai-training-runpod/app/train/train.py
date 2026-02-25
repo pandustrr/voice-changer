@@ -58,6 +58,11 @@ def run_training(dataset_dir, output_dir, epochs=100, batch_size=2):
     cfg.use_speaker_embedding = True
     if hasattr(cfg, "model_args"):
         setattr(cfg.model_args, "use_speaker_embedding", True)
+        # Compatibility Patch: Some XTTS versions expect these attributes
+        if not hasattr(cfg.model_args, "use_d_vector_file"):
+            setattr(cfg.model_args, "use_d_vector_file", False)
+        if not hasattr(cfg.model_args, "use_gpt_eval"):
+            setattr(cfg.model_args, "use_gpt_eval", False)
     
     cfg.use_d_vector_file = False
     cfg.use_phonemes = False
