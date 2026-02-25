@@ -165,6 +165,12 @@ def run_training(dataset_dir, output_dir, epochs=100, batch_size=2):
         eval_samples=samples # Gunakan data yang sama untuk validasi agar tidak error
     )
     
+    # PATCH: Force Trainer to use the model's AudioProcessor
+    # Ini krusial karena seringkali Trainer tidak otomatis mengambil AP dari XTTS model
+    if hasattr(model, "ap"):
+        trainer.ap = model.ap
+        print("🔧 Trainer AP has been synchronized with Model AP")
+    
     try:
         trainer.fit()
         print("✅ TRAINING SELESAI!")
