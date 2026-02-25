@@ -77,6 +77,19 @@ def run_training(dataset_dir, output_dir, epochs=100, batch_size=2):
     model.load_checkpoint(cfg, checkpoint_path=model_path, vocab_path=vocab_path, speaker_file_path=speaker_path)
     model.to("cuda")
 
+    # -- PATCH UNTUK KOMPATIBILITAS --
+    # 1. Pastikan model punya criterion (cara ukur error training)
+    if not hasattr(model, "get_criterion"):
+        model.get_criterion = lambda: torch.nn.L1Loss()
+    
+    # 2. Fix untuk tokenizer (agar tidak error log)
+    if not hasattr(model.tokenizer, "print_logs"):
+        model.tokenizer.print_logs = lambda x: None
+    
+    # 3. Matikan phonemes agar tidak butuh library eksternal lagi
+    model.tokenizer.use_phonemes = False
+    # -- END PATCH --
+
     # 5. CONFIGURE TRAINER
     args = TrainerArgs()
     
