@@ -1,93 +1,79 @@
 import os
 import torch
 import requests
+from pathlib import Path
+
+# ─── Patch torch.load untuk keamanan PyTorch 2.6+ ───────────────────────────
+orig_load = torch.load
+def patched_load(*args, **kwargs):
+    if 'weights_only' not in kwargs:
+        kwargs['weights_only'] = False
+    return orig_load(*args, **kwargs)
+torch.load = patched_load
+
 from TTS.tts.configs.xtts_config import XttsConfig
-from TTS.tts.models.xtts import XttsAudioConfig, XttsArgs
+from TTS.tts.models.xtts import Xtts, XttsAudioConfig, XttsArgs
 from TTS.tts.configs.shared_configs import BaseDatasetConfig
 
-# Fix untuk PyTorch 2.6+ security restriction
+# Allowlist untuk PyTorch serialization safety
 if hasattr(torch.serialization, 'add_safe_globals'):
     torch.serialization.add_safe_globals([XttsConfig, XttsAudioConfig, XttsArgs, BaseDatasetConfig])
 
-from TTS.tts.models.xtts import Xtts
 try:
     from trainer import Trainer, TrainerArgs
 except ImportError:
     os.system("pip install trainer")
     from trainer import Trainer, TrainerArgs
-from TTS.tts.configs.shared_configs import BaseDatasetConfig
-from TTS.tts.datasets import load_tts_samples
+
 
 def run_training(dataset_dir, output_dir, epochs=100, batch_size=2):
     """
-    Fungsi utama untuk menjalankan fine-tuning XTTS v2.
+    Fine-tuning XTTS v2 — Pendekatan bersih ala kode teman (train_samples=None).
+    Trainer handle dataset loading sendiri → menghindari semua collate_fn TypeError.
     """
-    # PINDAHKAN BASE MODEL KE FOLDER PERMANEN (Agar tidak download ulang 2GB terus)
+
+    # ── 1. DOWNLOAD BASE MODEL (Disimpan permanen agar tidak redownload) ──────
     base_model_dir = "/workspace/base_xtts_v2"
     os.makedirs(base_model_dir, exist_ok=True)
 
-    config_path = os.path.join(base_model_dir, "config.json")
-    model_path = os.path.join(base_model_dir, "model.pth")
-    vocab_path = os.path.join(base_model_dir, "vocab.json")
-    speaker_path = os.path.join(base_model_dir, "speakers_xtts.pth")
-    metadata_path = os.path.join(dataset_dir, "metadata.csv")
-    
-    # 1. DOWNLOAD BASE MODEL FILES (Jika belum ada)
     files_to_download = {
-        "config.json": "https://huggingface.co/coqui/XTTS-v2/raw/main/config.json",
-        "model.pth": "https://huggingface.co/coqui/XTTS-v2/resolve/main/model.pth",
-        "vocab.json": "https://huggingface.co/coqui/XTTS-v2/resolve/main/vocab.json",
-        "speakers_xtts.pth": "https://huggingface.co/coqui/XTTS-v2/resolve/main/speakers_xtts.pth"
+        "config.json":       "https://huggingface.co/coqui/XTTS-v2/raw/main/config.json",
+        "model.pth":         "https://huggingface.co/coqui/XTTS-v2/resolve/main/model.pth",
+        "vocab.json":        "https://huggingface.co/coqui/XTTS-v2/resolve/main/vocab.json",
+        "speakers_xtts.pth": "https://huggingface.co/coqui/XTTS-v2/resolve/main/speakers_xtts.pth",
     }
-
     for filename, url in files_to_download.items():
-        path = os.path.join(base_model_dir, filename)
-        if not os.path.exists(path):
+        dest = os.path.join(base_model_dir, filename)
+        if not os.path.exists(dest):
             print(f"📥 Downloading {filename} to permanent storage...")
             r = requests.get(url, stream=True)
-            with open(path, "wb") as f:
+            with open(dest, "wb") as f:
                 for chunk in r.iter_content(chunk_size=8192):
                     f.write(chunk)
 
-    # 2. XTTS CONFIGURATION
-    cfg = XttsConfig()
-    cfg.load_json(config_path)
-    cfg.languages = ["en"]  # XTTS v2 tokenizer tidak support 'id', tapi audio Indonesia tetap bisa di-fine-tune pakai bahasa 'en' (sama-sama Latin)
-    cfg.epochs = epochs
-    cfg.batch_size = batch_size
-    cfg.use_speaker_embedding = True
-    if hasattr(cfg, "model_args"):
-        setattr(cfg.model_args, "use_speaker_embedding", True)
-        # Compatibility Patch: Some XTTS versions expect these attributes in model_args (XttsArgs)
-        patch_vars = {
-            "use_d_vector_file": False,
-            "use_gpt_eval": False,
-            "use_language_embedding": False,  # Dimatikan - menyebabkan TypeError language_id_mapping
-            "use_phonemes": False,
-            "use_conditioning_latents": True
-        }
-        for var, val in patch_vars.items():
-            if not hasattr(cfg.model_args, var):
-                setattr(cfg.model_args, var, val)
-                print(f"🔧 Patched model_args.{var} = {val}")
-    
-    cfg.use_d_vector_file = False
-    cfg.use_phonemes = False
-    cfg.use_language_embedding = False  # Matikan Language Embedding - tidak dibutuhkan untuk fine-tuning suara
-    
-    # Tambahkan kalimat uji agar AI punya target bacaan saat evaluasi
-    cfg.test_sentences = [
-        "Halo, ini adalah suara buatan saya sendiri yang sedang dilatih.",
-        "Semoga hasil training hari ini sangat bagus dan memuaskan.",
-        "Teknologi kecerdasan buatan sekarang benar-benar luar biasa."
-    ]
-    
-    # 2.5 AUTO-FIX METADATA (Hapus .wav di kolom index jika ada)
+    # ── 2. SIAPKAN STRUKTUR DATASET (dataset_dir/wavs/) ───────────────────────
+    # LJSpeech formatter mengharapkan: path/wavs/*.wav + metadata.csv di root path
+    metadata_path = os.path.join(dataset_dir, "metadata.csv")
+    wavs_dir = os.path.join(dataset_dir, "wavs")
+
+    # Pindahkan audio ke subfolder wavs/ jika belum ada
+    os.makedirs(wavs_dir, exist_ok=True)
+    if os.path.exists(metadata_path):
+        # Cek apakah ada .wav di root yang perlu dipindah ke wavs/
+        wav_files_in_root = [f for f in os.listdir(dataset_dir) if f.endswith(".wav")]
+        if wav_files_in_root:
+            print(f"� Memindahkan {len(wav_files_in_root)} file .wav ke subfolder wavs/...")
+            for wav_file in wav_files_in_root:
+                src = os.path.join(dataset_dir, wav_file)
+                dst = os.path.join(wavs_dir, wav_file)
+                if not os.path.exists(dst):
+                    os.rename(src, dst)
+
+    # ── 2.5 AUTO-FIX METADATA (Hapus .wav di kolom ID jika ada) ──────────────
     if os.path.exists(metadata_path):
         print("🛠️ Checking metadata format...")
         with open(metadata_path, "r", encoding="utf-8") as f:
             lines = f.readlines()
-        
         fixed_lines = []
         needs_fix = False
         for line in lines:
@@ -98,127 +84,108 @@ def run_training(dataset_dir, output_dir, epochs=100, batch_size=2):
                 needs_fix = True
             else:
                 fixed_lines.append(line.strip())
-        
         if needs_fix:
             print("🔧 Fixing metadata: Removing .wav from audio IDs...")
             with open(metadata_path, "w", encoding="utf-8") as f:
-                for line in fixed_lines:
-                    f.write(line + "\n")
+                f.write("\n".join(fixed_lines) + "\n")
 
+    # Log jumlah sample
+    if os.path.exists(metadata_path):
+        with open(metadata_path, "r", encoding="utf-8") as f:
+            num_samples = len([l for l in f.readlines() if l.strip()])
+        print(f"✅ Dataset siap: {num_samples} file")
+
+    # ── 3. KONFIGURASI XTTS ───────────────────────────────────────────────────
+    config_path = os.path.join(base_model_dir, "config.json")
+    cfg = XttsConfig()
+    cfg.load_json(config_path)
+
+    # Dataset config — path ke PARENT dir, formatter ljspeech cari wavs/ sendiri
     d_cfg = BaseDatasetConfig(
-        dataset_name="custom_dataset",
-        meta_file_train=metadata_path,
-        meta_file_val=metadata_path,
-        path=dataset_dir,
         formatter="ljspeech",
-        language="id"
+        meta_file_train="metadata.csv",  # relatif terhadap path
+        path=dataset_dir,                # parent dir (berisi wavs/ dan metadata.csv)
+        language="en",                   # 'id' tidak tersedia di tokenizer XTTS v2
     )
-    cfg.dataset_config = [d_cfg]
+    cfg.datasets = [d_cfg]
 
-    # 3. LOAD SAMPLES
-    print("📋 Loading dataset samples...")
-    samples = load_tts_samples(d_cfg)
-    if isinstance(samples, tuple):
-        samples = samples[0]
-    print(f"✅ Data Terbaca: {len(samples)} file")
+    # Parameter training
+    cfg.epochs = epochs
+    cfg.batch_size = batch_size
+    cfg.eval_batch_size = max(1, batch_size // 2)
+    cfg.num_loader_workers = 4
+    cfg.grad_acumm_steps = 4           # Effective batch = batch_size * 4
+    cfg.lr = 5e-6                       # Learning rate konservatif
+    cfg.save_step = 1000
+    cfg.print_step = 50
+    cfg.mixed_precision = False
 
-    # 4. INITIALIZE MODEL & LOAD CHECKPOINT
+    # Matikan fitur yang tidak diperlukan (mencegah mapping TypeError)
+    cfg.use_d_vector_file = False
+    cfg.use_phonemes = False
+    cfg.use_language_embedding = False
+
+    # Uji kalimat saat evaluasi
+    cfg.test_sentences = [
+        "Halo, ini adalah suara buatan saya sendiri yang sedang dilatih.",
+        "Semoga hasil training hari ini sangat bagus dan memuaskan.",
+        "Teknologi kecerdasan buatan sekarang benar-benar luar biasa.",
+    ]
+
+    # Patch model_args untuk kompatibilitas berbagai versi TTS
+    if hasattr(cfg, "model_args") and cfg.model_args is not None:
+        compat_patch = {
+            "use_speaker_embedding":    True,
+            "use_d_vector_file":        False,
+            "use_gpt_eval":             False,
+            "use_language_embedding":   False,
+            "use_phonemes":             False,
+            "use_conditioning_latents": True,
+        }
+        for var, val in compat_patch.items():
+            if not hasattr(cfg.model_args, var):
+                setattr(cfg.model_args, var, val)
+                print(f"🔧 Patched model_args.{var} = {val}")
+
+    # ── 4. INISIALISASI MODEL & LOAD CHECKPOINT ───────────────────────────────
     print("🧠 Initializing XTTS v2 Model...")
     model = Xtts.init_from_config(cfg)
-    model.load_checkpoint(cfg, checkpoint_path=model_path, vocab_path=vocab_path, speaker_file_path=speaker_path)
-    model.to("cuda")
-    
-    # Ensure AudioProcessor is initialized (Fixed for 'NoneType has no attribute load_wav' & None / None division)
-    from TTS.utils.audio import AudioProcessor
-    if not hasattr(model, "ap") or model.ap is None:
-        print("🔧 Initializing AudioProcessor (Hardened Mode)...")
-        try:
-            # Sediakan semua parameter krusial untuk mencegah pembagian None/None
-            model.ap = AudioProcessor(
-                sample_rate=22050,
-                hop_length=256,
-                win_length=1024,
-                num_mels=80,
-                preemphasis=0.0,
-                ref_level_db=20,
-                power=1.5,
-                do_trim_silence=True
-            )
-        except Exception as ap_err:
-            print(f"⚠️ AP Init Error: {ap_err}. Using Dummy Fallback...")
-            class DummyAP:
-                def __init__(self): self.sample_rate = 22050
-                def load_wav(self, path):
-                    import librosa
-                    return librosa.load(path, sr=22050)[0]
-            model.ap = DummyAP()
 
-    # -- PATCH UNTUK KOMPATIBILITAS --
-    if not hasattr(model, "get_criterion"):
-        model.get_criterion = lambda: torch.nn.L1Loss()
-    
-    if not hasattr(model.tokenizer, "print_logs"):
-        model.tokenizer.print_logs = lambda x: None
-    
-    # NEW: Fix for 'VoiceBpeTokenizer' object has no attribute 'text_to_ids'
-    if not hasattr(model.tokenizer, "text_to_ids"):
+    # Gunakan checkpoint_dir (sama dengan pendekatan teman yang berhasil)
+    model.load_checkpoint(
+        cfg,
+        checkpoint_dir=base_model_dir,   # ← checkpoint_dir bukan checkpoint_path
+        eval=False,
+        strict=False,
+    )
+    model.to("cuda")
+
+    # Patch tokenizer jika versi baru tidak punya text_to_ids
+    if hasattr(model, "tokenizer") and not hasattr(model.tokenizer, "text_to_ids"):
         print("🔧 Patching tokenizer.text_to_ids (lang=en)...")
         model.tokenizer.text_to_ids = lambda x: model.tokenizer.encode(x, lang="en")
-    
-    model.tokenizer.use_phonemes = False
 
-    if hasattr(model, "speaker_manager") and model.speaker_manager is not None:
-        if not hasattr(model.speaker_manager, "save_ids_to_file"):
-            model.speaker_manager.save_ids_to_file = lambda x: None
-
-    if hasattr(model, "language_manager") and model.language_manager is not None:
-        if not hasattr(model.language_manager, "save_ids_to_file"):
-            model.language_manager.save_ids_to_file = lambda x: None
-    # -- END PATCH --
-
-    # 5. CONFIGURE TRAINER
-    args = TrainerArgs()
-    
-    print(f"🚀 Memulai proses training {epochs} Epoch (Production Mode)...")
-    
-    trainer = Trainer(
-        args, 
-        cfg, 
-        output_path=output_dir, 
-        model=model, 
-        train_samples=samples,
-        eval_samples=samples # Gunakan data yang sama untuk validasi agar tidak error
+    # ── 5. TRAINER — train_samples=None agar Trainer load sendiri ────────────
+    print(f"🚀 Memulai proses training {epochs} Epoch...")
+    trainer_args = TrainerArgs(
+        restore_path=None,
+        skip_train_epoch=False,
     )
-    
-    # PATCH: Force Trainer to use the model's AudioProcessor
-    # Ini krusial karena seringkali Trainer tidak otomatis mengambil AP dari XTTS model
-    if hasattr(model, "ap"):
-        trainer.ap = model.ap
-        print("🔧 Trainer AP has been synchronized with Model AP")
-    
-    # PATCH: Fix speaker_id_mapping - convert dict_keys to proper {name: index} dict
-    # Error: 'dict_keys' object is not subscriptable
-    def fix_speaker_mapping(dataset):
-        if hasattr(dataset, 'speaker_id_mapping'):
-            mapping = dataset.speaker_id_mapping
-            if not isinstance(mapping, dict) or (isinstance(mapping, dict) and len(mapping) > 0 and not isinstance(list(mapping.values())[0] if mapping else None, int)):
-                keys = list(mapping) if not isinstance(mapping, list) else mapping
-                dataset.speaker_id_mapping = {k: i for i, k in enumerate(keys)}
-                print(f"🔧 Fixed speaker_id_mapping: {dataset.speaker_id_mapping}")
-    
-    try:
-        if hasattr(trainer, 'train_loader') and hasattr(trainer.train_loader, 'dataset'):
-            fix_speaker_mapping(trainer.train_loader.dataset)
-        if hasattr(trainer, 'eval_loader') and trainer.eval_loader and hasattr(trainer.eval_loader, 'dataset'):
-            fix_speaker_mapping(trainer.eval_loader.dataset)
-    except Exception as spe:
-        print(f"⚠️ Speaker mapping patch warning: {spe}")
-    
+
+    trainer = Trainer(
+        trainer_args,
+        cfg,
+        output_path=output_dir,
+        model=model,
+        train_samples=None,   # ← Trainer handle dataset loading sendiri
+        eval_samples=None,    # ← Menghindari collate_fn speaker/language TypeError
+    )
+
+    # ── 6. FIT ────────────────────────────────────────────────────────────────
     try:
         trainer.fit()
         print("✅ TRAINING SELESAI!")
-        
-        # Cari folder output terbaru (biasanya run-DATE...)
+
         import glob
         run_folders = glob.glob(os.path.join(output_dir, "run-*"))
         if run_folders:
@@ -226,16 +193,16 @@ def run_training(dataset_dir, output_dir, epochs=100, batch_size=2):
             best_model = os.path.join(latest_run, "best_model.pth")
             if os.path.exists(best_model):
                 return best_model
-                
+
     except BaseException as e:
         print(f"❌ ERROR SAAT FIT (FATAL): {str(e)}")
         import traceback
         traceback.print_exc()
         raise e
-    
+
     return os.path.join(output_dir, "best_model.pth")
 
+
 if __name__ == "__main__":
-    # Test run
     D = "/workspace/voice-changer/ai-training-runpod"
     run_training(D, os.path.join(D, "out"))
