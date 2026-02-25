@@ -101,15 +101,9 @@ def run_training(dataset_dir, output_dir, epochs=100, batch_size=2):
     # -- END PATCH --
 
     # 5. CONFIGURE TRAINER
-    # PENTING: num_workers=0 untuk menghindari deadlock di docker/runpod
-    args = TrainerArgs(
-        num_workers=0,
-        save_all_best=False,
-        save_step=1000,
-        dashboard_logger=None
-    )
+    args = TrainerArgs()
     
-    print(f"🚀 Memulai proses training {epochs} Epoch (RTX 4090 - AntiHang Mode)...")
+    print(f"🚀 Memulai proses training {epochs} Epoch (RTX 4090 Mode)...")
     
     trainer = Trainer(
         args, 
@@ -122,22 +116,6 @@ def run_training(dataset_dir, output_dir, epochs=100, batch_size=2):
     try:
         trainer.fit()
         print("✅ TRAINING SELESAI!")
-    except Exception as e:
-        print(f"❌ ERROR SAAT FIT: {str(e)}")
-        raise e
-    
-    return os.path.join(output_dir, "best_model.pth")
-    
-    trainer = Trainer(
-        args, 
-        cfg, 
-        output_path=output_dir, 
-        model=model, 
-        train_samples=samples
-    )
-    
-    try:
-        trainer.fit()
     except Exception as e:
         print(f"❌ ERROR SAAT FIT: {str(e)}")
         raise e
