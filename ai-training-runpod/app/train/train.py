@@ -55,8 +55,11 @@ def run_training(dataset_dir, output_dir, epochs=100, batch_size=2):
     cfg.languages = ["id"]
     cfg.epochs = epochs
     cfg.batch_size = batch_size
-    cfg.use_d_vector_file = False
     cfg.use_speaker_embedding = True
+    if hasattr(cfg, "model_args"):
+        setattr(cfg.model_args, "use_speaker_embedding", True)
+    
+    cfg.use_d_vector_file = False
     cfg.use_phonemes = False
     
     # Tambahkan kalimat uji agar AI punya target bacaan saat evaluasi
