@@ -196,6 +196,24 @@ def run_training(dataset_dir, output_dir, epochs=100, batch_size=2):
         trainer.ap = model.ap
         print("🔧 Trainer AP has been synchronized with Model AP")
     
+    # PATCH: Fix speaker_id_mapping - convert dict_keys to proper {name: index} dict
+    # Error: 'dict_keys' object is not subscriptable
+    def fix_speaker_mapping(dataset):
+        if hasattr(dataset, 'speaker_id_mapping'):
+            mapping = dataset.speaker_id_mapping
+            if not isinstance(mapping, dict) or (isinstance(mapping, dict) and len(mapping) > 0 and not isinstance(list(mapping.values())[0] if mapping else None, int)):
+                keys = list(mapping) if not isinstance(mapping, list) else mapping
+                dataset.speaker_id_mapping = {k: i for i, k in enumerate(keys)}
+                print(f"🔧 Fixed speaker_id_mapping: {dataset.speaker_id_mapping}")
+    
+    try:
+        if hasattr(trainer, 'train_loader') and hasattr(trainer.train_loader, 'dataset'):
+            fix_speaker_mapping(trainer.train_loader.dataset)
+        if hasattr(trainer, 'eval_loader') and trainer.eval_loader and hasattr(trainer.eval_loader, 'dataset'):
+            fix_speaker_mapping(trainer.eval_loader.dataset)
+    except Exception as spe:
+        print(f"⚠️ Speaker mapping patch warning: {spe}")
+    
     try:
         trainer.fit()
         print("✅ TRAINING SELESAI!")
