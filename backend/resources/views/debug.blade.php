@@ -123,7 +123,7 @@
                             <span class="text-[9px] font-black text-indigo-400 uppercase tracking-widest block mb-2">Strategy</span>
                             <div class="flex items-center gap-3">
                                 <div class="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_10px_#10b981]"></div>
-                                <span class="text-sm font-bold text-white">Dynamic RTX 4090 Provisioning</span>
+                                <span class="text-sm font-bold text-white">Dynamic A40 Provisioning</span>
                             </div>
                         </div>
                         <div class="bg-black/30 p-5 rounded-3xl border border-white/5">
@@ -181,7 +181,7 @@
                     <h2 class="text-sm font-bold mb-6 text-indigo-400 tracking-widest uppercase">Pipeline Flow</h2>
                     <div class="space-y-6 relative">
                         <div class="absolute left-3 top-2 bottom-2 w-0.5 bg-slate-800"></div>
-                        @foreach(['Upload to R2', 'Sewa RTX 4090', 'Auto-Training', 'Cleanup Pod'] as $i => $step)
+                        @foreach(['Upload to R2', 'Sewa A40', 'Auto-Training', 'Cleanup Pod'] as $i => $step)
                         <div class="flex items-center gap-4 relative z-10">
                             <div class="w-6 h-6 rounded-full {{ $i == 0 ? 'bg-indigo-500 shadow-lg shadow-indigo-500/40' : 'bg-slate-800' }} flex items-center justify-center text-[10px] font-bold">
                                 {{ $i + 1 }}
