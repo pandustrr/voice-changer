@@ -62,7 +62,7 @@ def run_training(dataset_dir, output_dir, epochs=100, batch_size=2):
         patch_vars = {
             "use_d_vector_file": False,
             "use_gpt_eval": False,
-            "use_language_embedding": True,
+            "use_language_embedding": False,  # Dimatikan - menyebabkan TypeError language_id_mapping
             "use_phonemes": False,
             "use_conditioning_latents": True
         }
@@ -73,6 +73,7 @@ def run_training(dataset_dir, output_dir, epochs=100, batch_size=2):
     
     cfg.use_d_vector_file = False
     cfg.use_phonemes = False
+    cfg.use_language_embedding = False  # Matikan Language Embedding - tidak dibutuhkan untuk fine-tuning suara
     
     # Tambahkan kalimat uji agar AI punya target bacaan saat evaluasi
     cfg.test_sentences = [
