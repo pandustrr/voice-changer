@@ -127,6 +127,16 @@ def run_training(dataset_dir, output_dir, epochs=100, batch_size=2):
     try:
         trainer.fit()
         print("✅ TRAINING SELESAI!")
+        
+        # Cari folder output terbaru (biasanya run-DATE...)
+        import glob
+        run_folders = glob.glob(os.path.join(output_dir, "run-*"))
+        if run_folders:
+            latest_run = max(run_folders, key=os.path.getmtime)
+            best_model = os.path.join(latest_run, "best_model.pth")
+            if os.path.exists(best_model):
+                return best_model
+                
     except BaseException as e:
         print(f"❌ ERROR SAAT FIT (FATAL): {str(e)}")
         import traceback
