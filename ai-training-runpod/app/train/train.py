@@ -126,6 +126,12 @@ def run_training(dataset_dir, output_dir, epochs=100, batch_size=2):
     model = Xtts.init_from_config(cfg)
     model.load_checkpoint(cfg, checkpoint_path=model_path, vocab_path=vocab_path, speaker_file_path=speaker_path)
     model.to("cuda")
+    
+    # Ensure AudioProcessor is initialized (Fixed for 'NoneType has no attribute load_wav')
+    from TTS.utils.audio import AudioProcessor
+    if not hasattr(model, "ap") or model.ap is None:
+        print("🔧 Initializing AudioProcessor...")
+        model.ap = AudioProcessor(**cfg.audio)
 
     # -- PATCH UNTUK KOMPATIBILITAS --
     if not hasattr(model, "get_criterion"):
