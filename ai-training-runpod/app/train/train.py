@@ -159,6 +159,11 @@ def run_training(dataset_dir, output_dir, epochs=100, batch_size=2):
     if not hasattr(model.tokenizer, "print_logs"):
         model.tokenizer.print_logs = lambda x: None
     
+    # NEW: Fix for 'VoiceBpeTokenizer' object has no attribute 'text_to_ids'
+    if not hasattr(model.tokenizer, "text_to_ids"):
+        print("🔧 Patching tokenizer.text_to_ids...")
+        model.tokenizer.text_to_ids = lambda x: model.tokenizer.encode(x, lang=cfg.languages[0])
+    
     model.tokenizer.use_phonemes = False
 
     if hasattr(model, "speaker_manager") and model.speaker_manager is not None:
