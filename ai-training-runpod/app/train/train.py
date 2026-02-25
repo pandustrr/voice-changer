@@ -22,13 +22,17 @@ def run_training(dataset_dir, output_dir, epochs=100, batch_size=2):
     """
     Fungsi utama untuk menjalankan fine-tuning XTTS v2.
     """
-    config_path = os.path.join(dataset_dir, "config.json")
-    model_path = os.path.join(dataset_dir, "model.pth")
-    vocab_path = os.path.join(dataset_dir, "vocab.json")
-    speaker_path = os.path.join(dataset_dir, "speakers_xtts.pth")
+    # PINDAHKAN BASE MODEL KE FOLDER PERMANEN (Agar tidak download ulang 2GB terus)
+    base_model_dir = "/workspace/base_xtts_v2"
+    os.makedirs(base_model_dir, exist_ok=True)
+
+    config_path = os.path.join(base_model_dir, "config.json")
+    model_path = os.path.join(base_model_dir, "model.pth")
+    vocab_path = os.path.join(base_model_dir, "vocab.json")
+    speaker_path = os.path.join(base_model_dir, "speakers_xtts.pth")
     metadata_path = os.path.join(dataset_dir, "metadata.csv")
     
-    # 1. DOWNLOAD BASE MODEL FILES (Penting untuk Fine-tuning)
+    # 1. DOWNLOAD BASE MODEL FILES (Jika belum ada)
     files_to_download = {
         "config.json": "https://huggingface.co/coqui/XTTS-v2/raw/main/config.json",
         "model.pth": "https://huggingface.co/coqui/XTTS-v2/resolve/main/model.pth",
@@ -37,9 +41,9 @@ def run_training(dataset_dir, output_dir, epochs=100, batch_size=2):
     }
 
     for filename, url in files_to_download.items():
-        path = os.path.join(dataset_dir, filename)
+        path = os.path.join(base_model_dir, filename)
         if not os.path.exists(path):
-            print(f"📥 Downloading {filename}...")
+            print(f"📥 Downloading {filename} to permanent storage...")
             r = requests.get(url, stream=True)
             with open(path, "wb") as f:
                 for chunk in r.iter_content(chunk_size=8192):
@@ -53,7 +57,7 @@ def run_training(dataset_dir, output_dir, epochs=100, batch_size=2):
     cfg.batch_size = batch_size
     cfg.use_d_vector_file = False
     cfg.use_speaker_embedding = True
-    cfg.use_phonemes = False # Matikan phonemes untuk hindari error espeak
+    cfg.use_phonemes = False
     
     d_cfg = BaseDatasetConfig(
         dataset_name="custom_dataset",
@@ -66,6 +70,7 @@ def run_training(dataset_dir, output_dir, epochs=100, batch_size=2):
     cfg.dataset_config = [d_cfg]
 
     # 3. LOAD SAMPLES
+    print("📋 Loading dataset samples...")
     samples = load_tts_samples(d_cfg)
     if isinstance(samples, tuple):
         samples = samples[0]
@@ -78,32 +83,50 @@ def run_training(dataset_dir, output_dir, epochs=100, batch_size=2):
     model.to("cuda")
 
     # -- PATCH UNTUK KOMPATIBILITAS --
-    # 1. Pastikan model punya criterion (cara ukur error training)
     if not hasattr(model, "get_criterion"):
         model.get_criterion = lambda: torch.nn.L1Loss()
     
-    # 2. Fix untuk tokenizer (agar tidak error log)
     if not hasattr(model.tokenizer, "print_logs"):
         model.tokenizer.print_logs = lambda x: None
     
-    # 3. Matikan phonemes agar tidak butuh library eksternal lagi
     model.tokenizer.use_phonemes = False
 
-    # 4. Fix SpeakerManager (save_ids_to_file error)
     if hasattr(model, "speaker_manager") and model.speaker_manager is not None:
         if not hasattr(model.speaker_manager, "save_ids_to_file"):
             model.speaker_manager.save_ids_to_file = lambda x: None
 
-    # 5. Fix LanguageManager (save_ids_to_file error)
     if hasattr(model, "language_manager") and model.language_manager is not None:
         if not hasattr(model.language_manager, "save_ids_to_file"):
             model.language_manager.save_ids_to_file = lambda x: None
     # -- END PATCH --
 
     # 5. CONFIGURE TRAINER
-    args = TrainerArgs()
+    # PENTING: num_workers=0 untuk menghindari deadlock di docker/runpod
+    args = TrainerArgs(
+        num_workers=0,
+        save_all_best=False,
+        save_step=1000,
+        dashboard_logger=None
+    )
     
-    print(f"🚀 Memulai proses training selama {epochs} Epoch (RTX 4090 Mode)...")
+    print(f"🚀 Memulai proses training {epochs} Epoch (RTX 4090 - AntiHang Mode)...")
+    
+    trainer = Trainer(
+        args, 
+        cfg, 
+        output_path=output_dir, 
+        model=model, 
+        train_samples=samples
+    )
+    
+    try:
+        trainer.fit()
+        print("✅ TRAINING SELESAI!")
+    except Exception as e:
+        print(f"❌ ERROR SAAT FIT: {str(e)}")
+        raise e
+    
+    return os.path.join(output_dir, "best_model.pth")
     
     trainer = Trainer(
         args, 
