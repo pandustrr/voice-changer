@@ -59,6 +59,13 @@ def run_training(dataset_dir, output_dir, epochs=100, batch_size=2):
     cfg.use_speaker_embedding = True
     cfg.use_phonemes = False
     
+    # Tambahkan kalimat uji agar AI punya target bacaan saat evaluasi
+    cfg.test_sentences = [
+        "Halo, ini adalah suara buatan saya sendiri yang sedang dilatih.",
+        "Semoga hasil training hari ini sangat bagus dan memuaskan.",
+        "Teknologi kecerdasan buatan sekarang benar-benar luar biasa."
+    ]
+    
     d_cfg = BaseDatasetConfig(
         dataset_name="custom_dataset",
         meta_file_train=metadata_path,
@@ -103,21 +110,24 @@ def run_training(dataset_dir, output_dir, epochs=100, batch_size=2):
     # 5. CONFIGURE TRAINER
     args = TrainerArgs()
     
-    print(f"🚀 Memulai proses training {epochs} Epoch (RTX 4090 Mode)...")
+    print(f"🚀 Memulai proses training {epochs} Epoch (RTX 4090 - Production Mode)...")
     
     trainer = Trainer(
         args, 
         cfg, 
         output_path=output_dir, 
         model=model, 
-        train_samples=samples
+        train_samples=samples,
+        eval_samples=samples # Gunakan data yang sama untuk validasi agar tidak error
     )
     
     try:
         trainer.fit()
         print("✅ TRAINING SELESAI!")
-    except Exception as e:
-        print(f"❌ ERROR SAAT FIT: {str(e)}")
+    except BaseException as e:
+        print(f"❌ ERROR SAAT FIT (FATAL): {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise e
     
     return os.path.join(output_dir, "best_model.pth")
