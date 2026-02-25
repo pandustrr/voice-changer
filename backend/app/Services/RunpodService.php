@@ -42,7 +42,7 @@ class RunpodService
      * Create a new GPU Pod (RTX 4090) otomatis via GraphQL
      * Pindah ke GraphQL karena REST API v1 sering bermasalah dengan schema
      */
-    public function createPod($name = 'voice_changer_task')
+    public function createPod($name = 'voice_changer_A40')
     {
         $apiKey = env('RUNPOD_API_KEY');
         $query = '
@@ -51,7 +51,7 @@ class RunpodService
                 input: {
                   cloudType: SECURE,
                   gpuCount: 1,
-                  gpuTypeId: "NVIDIA GeForce RTX 4090",
+                  gpuTypeId: "NVIDIA A40",
                   imageName: "runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04",
                   containerDiskInGb: 30,
                   volumeInGb: 100,

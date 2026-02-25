@@ -200,7 +200,7 @@
                         <div class="w-full bg-slate-900 h-2 rounded-full overflow-hidden border border-white/5">
                             <div id="trainBar" class="bg-indigo-500 h-full transition-all duration-500" style="width: 0%"></div>
                         </div>
-                        <p id="trainMsg" class="text-[10px] text-slate-500 italic text-center">Waking up GPU RTX 4090...</p>
+                        <p id="trainMsg" class="text-[10px] text-slate-500 italic text-center">Waking up GPU A40...</p>
                     </div>
                 </div>
             </div>
@@ -462,7 +462,7 @@
                     if (data.success && data.pod_id) {
                         const podId = data.pod_id;
                         showToast(`Pod Berhasil Dibuat! ID: ${podId.substring(0,8)}...`, 'success');
-                        showToast(`Memulai proses booting GPU RTX 4090...`, 'info');
+                        showToast(`Memulai proses booting GPU A40...`, 'info');
 
                         // Start Polling
                         const pollInterval = setInterval(async () => {
