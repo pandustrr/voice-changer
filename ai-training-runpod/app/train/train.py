@@ -93,6 +93,11 @@ def run_training(dataset_dir, output_dir, epochs=100, batch_size=2):
     if hasattr(model, "speaker_manager") and model.speaker_manager is not None:
         if not hasattr(model.speaker_manager, "save_ids_to_file"):
             model.speaker_manager.save_ids_to_file = lambda x: None
+
+    # 5. Fix LanguageManager (save_ids_to_file error)
+    if hasattr(model, "language_manager") and model.language_manager is not None:
+        if not hasattr(model.language_manager, "save_ids_to_file"):
+            model.language_manager.save_ids_to_file = lambda x: None
     # -- END PATCH --
 
     # 5. CONFIGURE TRAINER
