@@ -127,13 +127,30 @@ def run_training(dataset_dir, output_dir, epochs=100, batch_size=2):
     model.load_checkpoint(cfg, checkpoint_path=model_path, vocab_path=vocab_path, speaker_file_path=speaker_path)
     model.to("cuda")
     
-    # Ensure AudioProcessor is initialized (Fixed for 'NoneType has no attribute load_wav')
+    # Ensure AudioProcessor is initialized (Fixed for 'NoneType has no attribute load_wav' & None / None division)
     from TTS.utils.audio import AudioProcessor
     if not hasattr(model, "ap") or model.ap is None:
-        print("🔧 Initializing AudioProcessor (Robust Mode)...")
-        # Gunakan 22050 sebagai fallback jika config bermasalah
-        sr = getattr(cfg.audio, 'sample_rate', 22050) or 22050
-        model.ap = AudioProcessor(sample_rate=sr, do_trim_silence=True)
+        print("🔧 Initializing AudioProcessor (Hardened Mode)...")
+        try:
+            # Sediakan semua parameter krusial untuk mencegah pembagian None/None
+            model.ap = AudioProcessor(
+                sample_rate=22050,
+                hop_length=256,
+                win_length=1024,
+                num_mels=80,
+                preemphasis=0.0,
+                ref_level_db=20,
+                power=1.5,
+                do_trim_silence=True
+            )
+        except Exception as ap_err:
+            print(f"⚠️ AP Init Error: {ap_err}. Using Dummy Fallback...")
+            class DummyAP:
+                def __init__(self): self.sample_rate = 22050
+                def load_wav(self, path):
+                    import librosa
+                    return librosa.load(path, sr=22050)[0]
+            model.ap = DummyAP()
 
     # -- PATCH UNTUK KOMPATIBILITAS --
     if not hasattr(model, "get_criterion"):
