@@ -160,15 +160,33 @@ def run_training(dataset_dir, output_dir, epochs=100, batch_size=2):
     )
     model.to("cuda")
 
+    # ── COMPATIBILITY PATCHES ─────────────────────────────────────────────────
     # Patch: get_criterion — diperlukan Trainer tapi tidak ada di Xtts versi ini
     if not hasattr(model, "get_criterion"):
         print("🔧 Patching model.get_criterion...")
         model.get_criterion = lambda: torch.nn.L1Loss()
 
-    # Patch tokenizer jika versi baru tidak punya text_to_ids
-    if hasattr(model, "tokenizer") and not hasattr(model.tokenizer, "text_to_ids"):
-        print("🔧 Patching tokenizer.text_to_ids (lang=en)...")
-        model.tokenizer.text_to_ids = lambda x: model.tokenizer.encode(x, lang="en")
+    # Patch: tokenizer.text_to_ids — method lama yang tidak ada di VoiceBpeTokenizer baru
+    if hasattr(model, "tokenizer"):
+        if not hasattr(model.tokenizer, "text_to_ids"):
+            print("🔧 Patching tokenizer.text_to_ids (lang=en)...")
+            model.tokenizer.text_to_ids = lambda x: model.tokenizer.encode(x, lang="en")
+        if not hasattr(model.tokenizer, "print_logs"):
+            model.tokenizer.print_logs = lambda x: None
+
+    # Patch: SpeakerManager.save_ids_to_file — method tidak ada di versi ini
+    if hasattr(model, "speaker_manager") and model.speaker_manager is not None:
+        if not hasattr(model.speaker_manager, "save_ids_to_file"):
+            print("🔧 Patching speaker_manager.save_ids_to_file...")
+            model.speaker_manager.save_ids_to_file = lambda x: None
+
+    # Patch: LanguageManager.save_ids_to_file — method tidak ada di versi ini
+    if hasattr(model, "language_manager") and model.language_manager is not None:
+        if not hasattr(model.language_manager, "save_ids_to_file"):
+            print("🔧 Patching language_manager.save_ids_to_file...")
+            model.language_manager.save_ids_to_file = lambda x: None
+    # ── END PATCHES ───────────────────────────────────────────────────────────
+
 
     # ── 5. TRAINER — train_samples=None agar Trainer load sendiri ────────────
     print(f"🚀 Memulai proses training {epochs} Epoch...")
