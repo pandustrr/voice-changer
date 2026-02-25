@@ -52,7 +52,7 @@ def run_training(dataset_dir, output_dir, epochs=100, batch_size=2):
     # 2. XTTS CONFIGURATION
     cfg = XttsConfig()
     cfg.load_json(config_path)
-    cfg.languages = ["id"]
+    cfg.languages = ["en"]  # XTTS v2 tokenizer tidak support 'id', tapi audio Indonesia tetap bisa di-fine-tune pakai bahasa 'en' (sama-sama Latin)
     cfg.epochs = epochs
     cfg.batch_size = batch_size
     cfg.use_speaker_embedding = True
@@ -161,8 +161,8 @@ def run_training(dataset_dir, output_dir, epochs=100, batch_size=2):
     
     # NEW: Fix for 'VoiceBpeTokenizer' object has no attribute 'text_to_ids'
     if not hasattr(model.tokenizer, "text_to_ids"):
-        print("🔧 Patching tokenizer.text_to_ids...")
-        model.tokenizer.text_to_ids = lambda x: model.tokenizer.encode(x, lang=cfg.languages[0])
+        print("🔧 Patching tokenizer.text_to_ids (lang=en)...")
+        model.tokenizer.text_to_ids = lambda x: model.tokenizer.encode(x, lang="en")
     
     model.tokenizer.use_phonemes = False
 
