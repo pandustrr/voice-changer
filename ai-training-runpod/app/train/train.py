@@ -88,6 +88,11 @@ def run_training(dataset_dir, output_dir, epochs=100, batch_size=2):
     
     # 3. Matikan phonemes agar tidak butuh library eksternal lagi
     model.tokenizer.use_phonemes = False
+
+    # 4. Fix SpeakerManager (save_ids_to_file error)
+    if hasattr(model, "speaker_manager") and model.speaker_manager is not None:
+        if not hasattr(model.speaker_manager, "save_ids_to_file"):
+            model.speaker_manager.save_ids_to_file = lambda x: None
     # -- END PATCH --
 
     # 5. CONFIGURE TRAINER
