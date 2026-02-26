@@ -56,15 +56,21 @@ def transcribe_with_google():
                 
                 # Bersihkan teks
                 text = text.replace("|", "")
-                results.append(f"{filename}|{text}")
+                # ID untuk LJSpeech format adalah nama file TANPA .wav
+                file_id = os.path.splitext(filename)[0]
+                
+                # Format LJSpeech butuh 3 kolom: ID|teks|teks_normal
+                results.append(f"{file_id}|{text}|{text}")
                 success_count += 1
                 print(f"✓ {text[:50]}...")
         except sr.UnknownValueError:
-            results.append(f"{filename}|[TIDAK_TERDETEKSI]")
+            file_id = os.path.splitext(filename)[0]
+            results.append(f"{file_id}|[TIDAK_TERDETEKSI]|[TIDAK_TERDETEKSI]")
             error_count += 1
             print("✗ Tidak terdeteksi")
         except Exception as e:
-            results.append(f"{filename}|[ERROR]")
+            file_id = os.path.splitext(filename)[0]
+            results.append(f"{file_id}|[ERROR]|[ERROR]")
             error_count += 1
             print(f"✗ Error: {e}")
 
